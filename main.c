@@ -19,28 +19,21 @@ typedef struct {
 
 pcre *re_keyval;
 int ovc[OVC_SZ];
-char *tmp;
+//char *tmp;
 
 
 int process_msg( char *msg, int len ) {
 	int res, re_offset = 0;
 	#define _SUB( A, B ) memcpy( tmp, msg + A, B - A ); *(tmp + B - A) = 0
-	unsigned short i;
+//	unsigned short i;
 
-
-/*	hit = strstr( msg, "Message: Authentication failed" )
-	if ( strstr( msg, "Message: Authentication failed" ) ) {
-		fprintf( stderr, "ERROR: Access Denied! Check username and password\n" );
-		return -1;
-	}*/
-	
-	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
+	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, PCRE_NEWLINE_CRLF, ovc, OVC_SZ );
 	while ( res && res > 0 ) {
-		if ( res > 1 ) {
-			for ( i = 1; i < res; i++ ) {
-				_SUB( ovc[i*2], ovc[i*2+1] );
-				printf( "%s\n", tmp/*, ovc[i*2], ovc[i*2+1]*/ );
-			}
+//		printf( "res = %d\n", res ); // #debug
+		if ( res == 3 ) {
+			*(msg+ovc[3]) = 0;
+			*(msg+ovc[5]) = 0;
+			printf( "%s == %s\n", msg+ovc[2], msg+ovc[4] );
 		}
 		re_offset = ovc[res*2-1];
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
@@ -78,7 +71,7 @@ int main( int argc, char **argv ){
 	}
 	
 	msg = malloc( MSG_SZ * 2 );
-	tmp = malloc( MSG_SZ );
+//	tmp = malloc( MSG_SZ );
 	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\n\r\n", "ampere", "123" );
 	
 	// send AUTH message
@@ -90,7 +83,7 @@ int main( int argc, char **argv ){
 	printf( "=== Session opened ===\n" );
 	
 	// init REGEXP parser
-	re_keyval = pcre_compile( "^(.*): (.*)$", PCRE_MULTILINE | PCRE_NEWLINE_CRLF, &err, &res, NULL );
+	re_keyval = pcre_compile( "^(.*): (.*)$", PCRE_MULTILINE, &err, &res, NULL );
 	if ( !re_keyval ) {
 		printf( "FATAL: re_keyval error %d: %s\n", res, err );
 		return -1;
