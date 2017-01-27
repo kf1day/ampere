@@ -11,25 +11,15 @@
 #include "conf.h"
 
 
-
-
-typedef struct {
-	unsigned char type; // 0 - null, 1 - response, 2 - event
-} msg_t;
-
 pcre *re_keyval;
 int ovc[OVC_SZ];
-//char *tmp;
 
 
 int process_msg( char *msg, int len ) {
 	int res, re_offset = 0;
-	#define _SUB( A, B ) memcpy( tmp, msg + A, B - A ); *(tmp + B - A) = 0
-//	unsigned short i;
 
 	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, PCRE_NEWLINE_CRLF, ovc, OVC_SZ );
 	while ( res && res > 0 ) {
-//		printf( "res = %d\n", res ); // #debug
 		if ( res == 3 ) {
 			*(msg+ovc[3]) = 0;
 			*(msg+ovc[5]) = 0;
@@ -50,8 +40,6 @@ int main( int argc, char **argv ){
 	char *msg, *buf_start, *buf_end;
 	const char *err;
 	
-	//string tmp = "Action: Login\r\nUsername: faillog\r\nSecret: 123\r\n\r\nAction: events\r\nEventmask: call\r\n\r\n";
-	
 	// create socket
 	sock = socket( AF_INET, SOCK_STREAM, 0 );
 	if ( sock < 0 ) {
@@ -71,7 +59,6 @@ int main( int argc, char **argv ){
 	}
 	
 	msg = malloc( MSG_SZ * 2 );
-//	tmp = malloc( MSG_SZ );
 	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\n\r\n", "ampere", "123" );
 	
 	// send AUTH message
