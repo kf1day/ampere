@@ -6,7 +6,7 @@
 #include <pcre.h>
 
 #define MSG_SZ 1024
-#define OVC_SZ 60
+#define OVC_SZ 15
 
 #include "conf.h"
 
@@ -18,17 +18,14 @@ int ovc[OVC_SZ];
 int process_msg( char *msg, int len ) {
 	int res, re_offset = 0;
 
-	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, PCRE_NEWLINE_CRLF, ovc, OVC_SZ );
-	while ( res && res > 0 ) {
-		if ( res == 3 ) {
-			*(msg+ovc[3]) = 0;
-			*(msg+ovc[5]) = 0;
-			printf( "%s == %s\n", msg+ovc[2], msg+ovc[4] );
-		}
-		re_offset = ovc[res*2-1];
+	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
+	while ( res == 3 ) {
+		*(msg+ovc[3]) = 0;
+		*(msg+ovc[5]) = 0;
+		printf( "%s == %s\n", msg+ovc[2], msg+ovc[4] );
+		re_offset = ovc[1];
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	}
-//	printf( "%s", msg );
 	printf( "=== Received %d bytes ===\n", len );
 	return 0;
 }
@@ -59,25 +56,24 @@ int main( int argc, char **argv ){
 	}
 	
 	msg = malloc( MSG_SZ * 2 );
-	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\n\r\n", "ampere", "123" );
+	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\nActionID: amperelogin\r\n\r\n", "ampere", "123" ); // \r\nActionID: amperelogin
 	
 	// send AUTH message
 	res = send( sock, msg, strlen( msg ), 0 );
 	if ( res < 0 ) {
 		fprintf( stderr, "FATAL: Send failed\n" );
-		return 1;
+		return -1;
 	}
-	printf( "=== Session opened ===\n" );
-	
+
 	// init REGEXP parser
-	re_keyval = pcre_compile( "^(.*): (.*)$", PCRE_MULTILINE, &err, &res, NULL );
+	re_keyval = pcre_compile( "(.*): (.*)\r\n", 0, &err, &res, NULL );
 	if ( !re_keyval ) {
 		printf( "FATAL: re_keyval error %d: %s\n", res, err );
 		return -1;
 	}
 	
-	while ( 1 ) {
-		
+	printf( "=== Session opened ===\n" );
+	while ( 1 ) { // mainloop
 		if ( buf_offset < MSG_SZ ) {
 			len = recv( sock, msg + buf_offset, MSG_SZ, 0 );
 			if ( len < 0 ) {
@@ -88,18 +84,16 @@ int main( int argc, char **argv ){
 				*(msg+buf_offset+len) = 0; // set NULLTERM to message end
 				buf_start = msg;
 				buf_end = strstr( buf_start, "\r\n\r\n" );
-				
 				if ( !buf_end ) { // MSGTERM not found, keep buffering
 					buf_offset += len;
 					continue;
 				}
-				
 				while ( buf_end ) {
 					buf_end += 2; // grab first CRLF
 					*buf_end = 0;
 					res = process_msg( buf_start, (int)( buf_end - buf_start ) );
 					if ( res < 0 ) {
-						break;
+						goto break_mainloop;
 					}
 					buf_start = buf_end + 2;
 					buf_end = strstr( buf_start, "\r\n\r\n" );
@@ -111,16 +105,13 @@ int main( int argc, char **argv ){
 					buf_offset = msg + buf_offset + len - buf_start;
 					memcpy( msg, buf_start, buf_offset );
 				}
-				
-				if ( res < 0 ) { // error state set by 'process_msg()'
-					break;
-				}
 			}
 		} else {
 			fprintf( stderr, "WARNING: Buffer too large: %d\n", buf_offset );
 			buf_offset = 0;
 		}
 	}
+	break_mainloop:;
 	
 	shutdown( sock, SHUT_RDWR );
 	return 0;
