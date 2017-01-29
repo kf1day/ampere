@@ -8,11 +8,11 @@
 #define MSG_SZ 1024
 #define OVC_SZ 15
 
-#include "conf.h"
-
 
 pcre *re_keyval;
 int ovc[OVC_SZ];
+
+#include "conf.h"
 
 
 int process_msg( char *msg, int len ) {
@@ -36,17 +36,28 @@ int main( int argc, char **argv ){
 	unsigned short buf_offset = 0;
 	char *msg, *buf_start, *buf_end;
 	const char *err;
+	conf_t *cfg;
 	
+	// read config
+	cfg = malloc( sizeof( conf_t ) );
+	cfg->host = 0x7f000001; // 127.0.0.1
+	cfg->port = 5038;
+	strcpy( cfg->user, "ampere" );
+	strcpy( cfg->pass, "ampere" );
+	res = conf_load( cfg );
+	if ( res < 0 ) {
+		return -1;
+	}
+
 	// create socket
 	sock = socket( AF_INET, SOCK_STREAM, 0 );
 	if ( sock < 0 ) {
 		fprintf( stderr, "FATAL: Could not create socket\n" );
 		return -1;
 	}
-	
-	srv.sin_addr.s_addr = inet_addr( "192.168.0.212" );
+	srv.sin_addr.s_addr = cfg->host;
 	srv.sin_family = AF_INET;
-	srv.sin_port = htons( 5038 );
+	srv.sin_port = htons( cfg->port );
 	
 	// connect to AMI
 	res = connect( sock, ( struct sockaddr* ) &srv, sizeof( srv ) );
@@ -56,7 +67,7 @@ int main( int argc, char **argv ){
 	}
 	
 	msg = malloc( MSG_SZ * 2 );
-	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\nActionID: amperelogin\r\n\r\n", "ampere", "123" ); // \r\nActionID: amperelogin
+	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\nActionID: amperelogin\r\n\r\n", cfg->user, cfg->pass );
 	
 	// send AUTH message
 	res = send( sock, msg, strlen( msg ), 0 );
@@ -68,7 +79,7 @@ int main( int argc, char **argv ){
 	// init REGEXP parser
 	re_keyval = pcre_compile( "(.*): (.*)\r\n", 0, &err, &res, NULL );
 	if ( !re_keyval ) {
-		printf( "FATAL: re_keyval error %d: %s\n", res, err );
+		printf( "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
 		return -1;
 	}
 	
