@@ -11,6 +11,7 @@
 
 pcre *re_keyval;
 int ovc[OVC_SZ];
+const char *err;
 
 #include "conf.h"
 
@@ -22,11 +23,11 @@ int process_msg( char *msg, int len ) {
 	while ( res == 3 ) {
 		*(msg+ovc[3]) = 0;
 		*(msg+ovc[5]) = 0;
-		printf( "%s == %s\n", msg+ovc[2], msg+ovc[4] );
+		printf( "%s -> %s\n", msg+ovc[2], msg+ovc[4] );
 		re_offset = ovc[1];
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	}
-	printf( "=== Received %d bytes ===\n", len );
+	printf( "#\n# === Received %d bytes ===\n#\n", len );
 	return 0;
 }
 
@@ -35,7 +36,6 @@ int main( int argc, char **argv ){
 	struct sockaddr_in srv;
 	unsigned short buf_offset = 0;
 	char *msg, *buf_start, *buf_end;
-	const char *err;
 	conf_t *cfg;
 	
 	// read config
@@ -46,14 +46,14 @@ int main( int argc, char **argv ){
 	strcpy( cfg->pass, "ampere" );
 	res = conf_load( cfg );
 	if ( res < 0 ) {
-		return -1;
+		return res;
 	}
 
 	// create socket
 	sock = socket( AF_INET, SOCK_STREAM, 0 );
 	if ( sock < 0 ) {
 		fprintf( stderr, "FATAL: Could not create socket\n" );
-		return -1;
+		return -2;
 	}
 	srv.sin_addr.s_addr = cfg->host;
 	srv.sin_family = AF_INET;
@@ -63,6 +63,7 @@ int main( int argc, char **argv ){
 	res = connect( sock, ( struct sockaddr* ) &srv, sizeof( srv ) );
 	if ( res < 0 ) {
 		fprintf( stderr, "ERROR: Cannot connect to remote server\n" );
+		shutdown( sock, SHUT_RDWR );
 		return -1;
 	}
 	
@@ -73,23 +74,26 @@ int main( int argc, char **argv ){
 	res = send( sock, msg, strlen( msg ), 0 );
 	if ( res < 0 ) {
 		fprintf( stderr, "FATAL: Send failed\n" );
-		return -1;
+		shutdown( sock, SHUT_RDWR );
+		return -2;
 	}
 
 	// init REGEXP parser
 	re_keyval = pcre_compile( "(.*): (.*)\r\n", 0, &err, &res, NULL );
 	if ( !re_keyval ) {
 		printf( "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
-		return -1;
+		shutdown( sock, SHUT_RDWR );
+		return -2;
 	}
 	
-	printf( "=== Session opened ===\n" );
+	printf( "#\n# === Session opened ===\n#\n" );
 	while ( 1 ) { // mainloop
 		if ( buf_offset < MSG_SZ ) {
 			len = recv( sock, msg + buf_offset, MSG_SZ, 0 );
 			if ( len < 0 ) {
 				fprintf( stderr, "FATAL: Error reciving data\n" );
-				break;
+				shutdown( sock, SHUT_RDWR );
+				return -2;
 			}
 			if ( len > 0 ) {
 				*(msg+buf_offset+len) = 0; // set NULLTERM to message end
@@ -124,6 +128,8 @@ int main( int argc, char **argv ){
 	}
 	break_mainloop:;
 	
+	printf( "#\n# === Session closed ===\n#\n" );
+
 	shutdown( sock, SHUT_RDWR );
 	return 0;
 }

@@ -31,7 +31,7 @@ int conf_readln( FILE *fd, char *buf ) {
 }
 
 int conf_load( conf_t *cfg ) {
-	const char *err = malloc( CONF_STR_SZ );
+	#define _IS( S ) strcmp( ln+ovc[2], S ) == 0
 	char *ln = malloc( CONF_STR_SZ );
 	int res;
 	FILE *fd;
@@ -45,7 +45,7 @@ int conf_load( conf_t *cfg ) {
 	re_cfg_keyval = pcre_compile( "^([^=#;\\s]*)\\s*=\\s*(.*)$", 0, &err, &res, NULL );
 	if ( !re_cfg_keyval ) {
 		printf( "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
-		return -1;
+		return -2;
 	}
 	
 	while ( !feof( fd ) ) {
@@ -55,15 +55,17 @@ int conf_load( conf_t *cfg ) {
 			if ( res == 3 ) {
 				*(ln+ovc[3]) = 0;
 				*(ln+ovc[5]) = 0;
-				if ( strcmp( ln+ovc[2], "host" ) == 0 ) cfg->host = inet_addr( ln+ovc[4] );
-				if ( strcmp( ln+ovc[2], "port" ) == 0 ) cfg->port =  atoi( ln+ovc[4] );
-				if ( strcmp( ln+ovc[2], "user" ) == 0 ) strcpy( cfg->user, ln+ovc[4] );
-				if ( strcmp( ln+ovc[2], "pass" ) == 0 ) strcpy( cfg->pass, ln+ovc[4] );
-				
+				if ( _IS( "host" ) ) {
+					cfg->host = inet_addr( ln+ovc[4] );
+				} else if ( _IS( "port" ) ) {
+					cfg->port = atoi( ln+ovc[4] );
+				} else if ( _IS( "user" ) ) {
+					strcpy( cfg->user, ln+ovc[4] );
+				} else if ( _IS( "pass" ) ) {
+					strcpy( cfg->pass, ln+ovc[4] );
+				}
 			}
 		}
 	}
 	return 0;
 }
-
-//int conf_
