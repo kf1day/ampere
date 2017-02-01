@@ -1,33 +1,81 @@
-#include <stdio.h>			// printf
-#include <string.h>			// strlen
-#include <stdlib.h>			// malloc
-#include <sys/socket.h>		// socket
-#include <arpa/inet.h>		// inet_addr
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 #include <pcre.h>
 
-#define MSG_SZ 1024
+
+#define STR_SZ 256
+#define MSG_SZ 4*STR_SZ
 #define OVC_SZ 15
 
 
 pcre *re_keyval;
+pcre *re_ipv4;
 int ovc[OVC_SZ];
+char *tmp_account, *tmp_address;
 const char *err;
 
+
 #include "conf.h"
+#include "vmap.h"
 
 
 int process_msg( char *msg, int len ) {
+	#define _K( S ) strcmp( msg+ovc[2], S ) == 0
+	#define _V( S ) strcmp( msg+ovc[4], S ) == 0
 	int res, re_offset = 0;
+	uint8_t state = 0;
 
 	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
+	printf( "\n>>>>>>>>>>>>>>>>>>>>\n" );		// debug
 	while ( res == 3 ) {
 		*(msg+ovc[3]) = 0;
 		*(msg+ovc[5]) = 0;
-		printf( "%s -> %s\n", msg+ovc[2], msg+ovc[4] );
 		re_offset = ovc[1];
+		printf( "%s -> %s\n", msg+ovc[2], msg+ovc[4] );		// debug
+		if ( _K( "Response"	) && _V( "Success" ) ) {
+			state += 0x10;
+		} else if ( _K( "Response"	) && _V( "Error" ) ) {
+			state += 0x20;
+		} else if ( _K( "Event"	) && _V( "ChallengeSent" ) ) {
+			state += 0x30;
+		} else if ( _K( "ActionID"	) && _V( "AmpereX7E1" ) ) {
+			state += 0x01;
+		} else if ( _K( "AccountID"	) ) {
+			memcpy( tmp_account, msg+ovc[4], ovc[5] - ovc[4] + 1 );
+		} else if ( _K( "RemoteAddress"	) ) {
+			memcpy( tmp_address, msg+ovc[4], ovc[5] - ovc[4] + 1 );
+			res = pcre_exec( re_ipv4, NULL, tmp_address, ovc[5] - ovc[4], 0, 0, ovc, OVC_SZ );
+			if ( res == 3 ) {
+				memcpy( tmp_address, tmp_address + ovc[4], ovc[5] - ovc[4] );
+				*(tmp_address+ovc[5]-ovc[4]) = 0;
+				state += 0x01;
+			} else {
+				state += 0x02;
+			}
+		}
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	}
-	printf( "#\n# === Received %d bytes ===\n#\n", len );
+	printf( "<<<<<<<<<<<<<<<<<<<<\n\n" );		// debug
+
+	switch ( state ) {
+		case 0x11:
+			printf( "Authentication accepted\n" );
+			break;
+		case 0x21:
+			fprintf( stderr, "ERROR: Authentication failed\n" );
+			return -1;
+		case 0x31:
+			printf( "Open challenge warning for account %s from %x\n", tmp_account, inet_addr( tmp_address ) );
+			break;
+		case 0x32:
+			printf( "Cannot parse IP for account %s: %s\n", tmp_account, tmp_address );
+			break;
+	}
+//	vmap_add( 0x0100007f, 1 );
+//	printf( "Received %d bytes\n", len );
 	return 0;
 }
 
@@ -40,7 +88,7 @@ int main( int argc, char **argv ){
 	
 	// read config
 	cfg = malloc( sizeof( conf_t ) );
-	cfg->host = 0x7f000001; // 127.0.0.1
+	cfg->host = 0x0100007F; // 127.0.0.1
 	cfg->port = 5038;
 	strcpy( cfg->user, "ampere" );
 	strcpy( cfg->pass, "ampere" );
@@ -67,10 +115,14 @@ int main( int argc, char **argv ){
 		return -1;
 	}
 	
+	// init VARS
+	tmp_account = malloc( STR_SZ );
+	tmp_address = malloc( STR_SZ );
 	msg = malloc( MSG_SZ * 2 );
-	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\nActionID: amperelogin\r\n\r\n", cfg->user, cfg->pass );
+	memset( &vmap, 0, sizeof( vmap ) );
 	
 	// send AUTH message
+	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\nActionID: AmpereX7E1\r\n\r\n", cfg->user, cfg->pass );
 	res = send( sock, msg, strlen( msg ), 0 );
 	if ( res < 0 ) {
 		fprintf( stderr, "FATAL: Send failed\n" );
@@ -85,8 +137,14 @@ int main( int argc, char **argv ){
 		shutdown( sock, SHUT_RDWR );
 		return -2;
 	}
+	re_ipv4 = pcre_compile( "^IPV4/(TCP|UDP)/([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})/", 0, &err, &res, NULL );
+	if ( !re_ipv4 ) {
+		printf( "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
+		shutdown( sock, SHUT_RDWR );
+		return -2;
+	}
 	
-	printf( "#\n# === Session opened ===\n#\n" );
+	printf( "Session opened\n" );
 	while ( 1 ) { // mainloop
 		if ( buf_offset < MSG_SZ ) {
 			len = recv( sock, msg + buf_offset, MSG_SZ, 0 );
@@ -128,7 +186,7 @@ int main( int argc, char **argv ){
 	}
 	break_mainloop:;
 	
-	printf( "#\n# === Session closed ===\n#\n" );
+	printf( "Session closed\n" );
 
 	shutdown( sock, SHUT_RDWR );
 	return 0;

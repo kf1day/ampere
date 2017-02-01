@@ -1,6 +1,9 @@
 #ampere
 ####A small daemon to process Asterisk's Management Interface security events
 
+Dependencies:
+- libpcre3
+
 example of asterisk's "manager.conf"
 
 ```
@@ -15,3 +18,6 @@ secret = 123
 read = security
 write = no
 ```
+
+The tool is not acting like a natural daemon (for now) and should be started via SystemD / SysV init script
+

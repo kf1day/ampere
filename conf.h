@@ -1,6 +1,3 @@
-#include <stdio.h>
-#include <sys/stat.h>
-
 #define CONF_STR_SZ 1024
 #define CONF_FILE "ampere.cfg"
 
@@ -11,6 +8,17 @@ typedef struct {
 	unsigned short int port;
 } conf_t;
 
+
+/*******************
+ *    INTERFACE    *
+ *******************/
+int conf_readln( FILE *fd, char *buf );
+int conf_load( conf_t *cfg );
+
+
+/*******************
+ *  IPLEMENTATION  *
+ *******************/
 int conf_readln( FILE *fd, char *buf ) {
 	char c;
 	int i = 0;
