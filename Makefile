@@ -1,13 +1,6 @@
 default:
-	gcc -Wall ./main.c -o ./ampere -lpcre
+	gcc -Wall ./main.c -o ./ampere -lpcre -Ddebug
 	
 nice:
 	gcc -O3 -Wall ./main.c -o ./ampere -lpcre
 	strip ./ampere
-
-br:
-	printf "==========================================================================\n==========================================================================\n"
-
-con:
-	printf "Action: Login\r\nUsername: faillog\r\nSecret: 123\r\n\r\n" | nc 192.168.0.212 5038
-#	printf "Action: Login\r\nUsername: faillog\r\nSecret: 123\r\n\r\nAction: events\r\nEventmask: call\r\n\r\n";

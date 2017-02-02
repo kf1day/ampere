@@ -17,7 +17,7 @@ vmap_t vmap[VMAP_SZ];
  *******************/
 int vmap_add( in_addr_t addr, int8_t inc );
 int vmap_del( in_addr_t addr );
-int vmap_find_by_addr( in_addr_t addr );
+int vmap_find_addr( in_addr_t addr );
 
 
 /*******************
@@ -26,11 +26,13 @@ int vmap_find_by_addr( in_addr_t addr );
 int vmap_add( in_addr_t addr, int8_t inc ) {
 	int find;
 	
-	find = vmap_find_by_addr( addr );
+	find = vmap_find_addr( addr );
 	if ( find < 0 ) {
 		vmap[vmap_index].addr = addr;
 		vmap[vmap_index].fine = inc;
-		printf( "Set fine %d to pos %d ( %s )\n", inc, vmap_index, inet_ntoa( *(struct in_addr*)&addr ) );
+		#ifdef debug
+		printf( "Set fine %d to 0x%X at pos %d\n", inc, addr, vmap_index ); // inet_ntoa( *(struct in_addr*)&addr )
+		#endif
 		if ( vmap[vmap_index].next > 0 ) {
 			vmap_index = vmap[vmap_index].next;
 		} else if ( vmap_index < VMAP_SZ - 2 ) {
@@ -41,16 +43,26 @@ int vmap_add( in_addr_t addr, int8_t inc ) {
 		}
 	} else {
 		vmap[find].fine += inc;
-		printf( "Set fine %d to pos %d ( %s )\n", vmap[find].fine, find, inet_ntoa( *(struct in_addr*)&addr ) );
-		return vmap[find].fine;
+		#ifdef debug
+		printf( "Set fine %d to 0x%X at pos %d\n", vmap[find].fine, addr, find );
+		#endif
+		if ( vmap[find].fine < 0 ) {
+			return 0;
+		} else {
+			return vmap[find].fine;
+		}
 	}
-	return inc;
+	if ( inc < 0 ) {
+		return 0;
+	} else {
+		return inc;
+	}
 }
 
 int vmap_del( in_addr_t addr ) {
 	int find;
 
-	find = vmap_find_by_addr( addr );
+	find = vmap_find_addr( addr );
 	if ( find < 0 ) {
 		return -1;
 	} else {
@@ -58,11 +70,14 @@ int vmap_del( in_addr_t addr ) {
 		vmap[find].fine = 0;
 		vmap[find].next = vmap_index;
 		vmap_index = find;
+		#ifdef debug
+		printf( "Drop fines from 0x%X at pos %d\n", addr, find );
+		#endif
 	}
 	return 0;
 }
 
-int vmap_find_by_addr( in_addr_t addr ) {
+int vmap_find_addr( in_addr_t addr ) {
 	uint16_t i;
 		
 	for ( i = 0; i < VMAP_SZ; i++ ) {

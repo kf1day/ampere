@@ -29,23 +29,29 @@ int process_msg( char *msg, int len ) {
 	uint8_t state = 0;
 
 	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
-	printf( "\n>>>>>>>>>>>>>>>>>>>>\n" );		// debug
+	#ifdef debug
+	printf( "\n>>>>>>>>>>>>>>>>>>>>\n" );
+	#endif
 	while ( res == 3 ) {
 		*(msg+ovc[3]) = 0;
 		*(msg+ovc[5]) = 0;
 		re_offset = ovc[1];
-		printf( "%s -> %s\n", msg+ovc[2], msg+ovc[4] );		// debug
-		if ( _K( "Response"	) && _V( "Success" ) ) {
+		#ifdef debug
+		printf( "%s -> %s\n", msg+ovc[2], msg+ovc[4] );
+		#endif
+		if ( _K( "Response" ) && _V( "Success" ) ) {
 			state += 0x10;
-		} else if ( _K( "Response"	) && _V( "Error" ) ) {
+		} else if ( _K( "Response" ) && _V( "Error" ) ) {
 			state += 0x20;
-		} else if ( _K( "Event"	) && _V( "ChallengeSent" ) ) {
+		} else if ( _K( "Event" ) && _V( "ChallengeSent" ) ) {
 			state += 0x30;
-		} else if ( _K( "ActionID"	) && _V( "AmpereX7E1" ) ) {
+		} else if ( _K( "Event" ) && _V( "SuccessfulAuth" ) ) {
+			state += 0x40;
+		} else if ( _K( "ActionID" ) && _V( "AmpereX7E1" ) ) {
 			state += 0x01;
-		} else if ( _K( "AccountID"	) ) {
+		} else if ( _K( "AccountID" ) ) {
 			memcpy( tmp_account, msg+ovc[4], ovc[5] - ovc[4] + 1 );
-		} else if ( _K( "RemoteAddress"	) ) {
+		} else if ( _K( "RemoteAddress" ) ) {
 			memcpy( tmp_address, msg+ovc[4], ovc[5] - ovc[4] + 1 );
 			res = pcre_exec( re_ipv4, NULL, tmp_address, ovc[5] - ovc[4], 0, 0, ovc, OVC_SZ );
 			if ( res == 3 ) {
@@ -58,7 +64,9 @@ int process_msg( char *msg, int len ) {
 		}
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	}
-	printf( "<<<<<<<<<<<<<<<<<<<<\n\n" );		// debug
+	#ifdef debug
+	printf( "<<<<<<<<<<<<<<<<<<<<\n\n" );
+	#endif
 
 	switch ( state ) {
 		case 0x11:
@@ -68,10 +76,18 @@ int process_msg( char *msg, int len ) {
 			fprintf( stderr, "ERROR: Authentication failed\n" );
 			return -1;
 		case 0x31:
-			printf( "Open challenge warning for account %s from %x\n", tmp_account, inet_addr( tmp_address ) );
-			break;
+			res = vmap_add( inet_addr( tmp_address ), 1 );
+			if ( res < 0 ) {
+				return res;
+			} else {
+				break;
+			}
 		case 0x32:
-			printf( "Cannot parse IP for account %s: %s\n", tmp_account, tmp_address );
+		case 0x42:
+			printf( "WARNING: Cannot parse IP for account %s: %s\n", tmp_account, tmp_address );
+			break;
+		case 0x41: // 
+			res = vmap_del( inet_addr( tmp_address ) );
 			break;
 	}
 //	vmap_add( 0x0100007f, 1 );
@@ -88,7 +104,7 @@ int main( int argc, char **argv ){
 	
 	// read config
 	cfg = malloc( sizeof( conf_t ) );
-	cfg->host = 0x0100007F; // 127.0.0.1
+	cfg->host = 0x0100007F; // 127.0.0.1, little endian
 	cfg->port = 5038;
 	strcpy( cfg->user, "ampere" );
 	strcpy( cfg->pass, "ampere" );
@@ -133,13 +149,13 @@ int main( int argc, char **argv ){
 	// init REGEXP parser
 	re_keyval = pcre_compile( "(.*): (.*)\r\n", 0, &err, &res, NULL );
 	if ( !re_keyval ) {
-		printf( "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
+		fprintf( stderr, "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
 		shutdown( sock, SHUT_RDWR );
 		return -2;
 	}
 	re_ipv4 = pcre_compile( "^IPV4/(TCP|UDP)/([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})/", 0, &err, &res, NULL );
 	if ( !re_ipv4 ) {
-		printf( "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
+		fprintf( stderr, "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
 		shutdown( sock, SHUT_RDWR );
 		return -2;
 	}
@@ -180,7 +196,7 @@ int main( int argc, char **argv ){
 				}
 			}
 		} else {
-			fprintf( stderr, "WARNING: Buffer too large: %d\n", buf_offset );
+			printf( "WARNING: Buffer too large: %d\n", buf_offset );
 			buf_offset = 0;
 		}
 	}

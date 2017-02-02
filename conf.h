@@ -52,7 +52,7 @@ int conf_load( conf_t *cfg ) {
 	}
 	re_cfg_keyval = pcre_compile( "^([^=#;\\s]*)\\s*=\\s*(.*)$", 0, &err, &res, NULL );
 	if ( !re_cfg_keyval ) {
-		printf( "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
+		fprintf( stderr, "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
 		return -2;
 	}
 	
