@@ -4,12 +4,13 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pcre.h>
+//#include <libiptc/libiptc.h>
 
 
 #define STR_SZ 256
 #define MSG_SZ 4*STR_SZ
 #define OVC_SZ 15
-
+#define MPL_AC 3 // attemt count multiptier
 
 pcre *re_keyval;
 pcre *re_ipv4;
@@ -39,27 +40,22 @@ int process_msg( char *msg, int len ) {
 		#ifdef debug
 		printf( "%s -> %s\n", msg+ovc[2], msg+ovc[4] );
 		#endif
-		if ( _K( "Response" ) && _V( "Success" ) ) {
-			state += 0x10;
-		} else if ( _K( "Response" ) && _V( "Error" ) ) {
-			state += 0x20;
-		} else if ( _K( "Event" ) && _V( "ChallengeSent" ) ) {
-			state += 0x30;
-		} else if ( _K( "Event" ) && _V( "SuccessfulAuth" ) ) {
-			state += 0x40;
-		} else if ( _K( "ActionID" ) && _V( "AmpereX7E1" ) ) {
-			state += 0x01;
-		} else if ( _K( "AccountID" ) ) {
-			memcpy( tmp_account, msg+ovc[4], ovc[5] - ovc[4] + 1 );
-		} else if ( _K( "RemoteAddress" ) ) {
+		if ( _K( "Response" ) && _V( "Success" ) ) state += 0x01;
+		if ( _K( "Response" ) && _V( "Error" ) ) state += 0x02;
+		if ( _K( "Event" ) && _V( "SuccessfulAuth" ) ) state += 0x03;
+		if ( _K( "Event" ) && _V( "ChallengeSent" ) ) state += 0x04;
+		if ( _K( "Event" ) && _V( "ChallengeResponseFailed" ) ) state += 0x05;
+		if ( _K( "ActionID" ) && _V( "AmpereX7E1" ) )	state += 0x10;
+		if ( _K( "AccountID" ) ) memcpy( tmp_account, msg+ovc[4], ovc[5] - ovc[4] + 1 );
+		if ( _K( "RemoteAddress" ) ) {
 			memcpy( tmp_address, msg+ovc[4], ovc[5] - ovc[4] + 1 );
 			res = pcre_exec( re_ipv4, NULL, tmp_address, ovc[5] - ovc[4], 0, 0, ovc, OVC_SZ );
 			if ( res == 3 ) {
 				memcpy( tmp_address, tmp_address + ovc[4], ovc[5] - ovc[4] );
 				*(tmp_address+ovc[5]-ovc[4]) = 0;
-				state += 0x01;
+				state += 0x20;
 			} else {
-				state += 0x02;
+				state += 0x40;
 			}
 		}
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
@@ -67,31 +63,42 @@ int process_msg( char *msg, int len ) {
 	#ifdef debug
 	printf( "<<<<<<<<<<<<<<<<<<<<\n\n" );
 	#endif
+	
+	res = 0;
 
 	switch ( state ) {
 		case 0x11:
 			printf( "Authentication accepted\n" );
 			break;
-		case 0x21:
+		case 0x12:
 			fprintf( stderr, "ERROR: Authentication failed\n" );
 			return -1;
-		case 0x31:
+		case 0x23:
+			res = vmap_del( inet_addr( tmp_address ) );
+			break;
+		case 0x24:
+			res = vmap_add( inet_addr( tmp_address ), 4 );
+			if ( res < 0 ) {
+				return res;
+			} else {
+				break;
+			}
+		case 0x25:
 			res = vmap_add( inet_addr( tmp_address ), 1 );
 			if ( res < 0 ) {
 				return res;
 			} else {
 				break;
 			}
-		case 0x32:
-		case 0x42:
+		case 0x43:
+		case 0x44:
 			printf( "WARNING: Cannot parse IP for account %s: %s\n", tmp_account, tmp_address );
 			break;
-		case 0x41: // 
-			res = vmap_del( inet_addr( tmp_address ) );
-			break;
 	}
-//	vmap_add( 0x0100007f, 1 );
-//	printf( "Received %d bytes\n", len );
+	if ( res >= 5 * MPL_AC ) {
+		printf( ">> INSERT INTO jail(lastid, addr) VALUES (\"%s\", \"%s\");\n", tmp_account, tmp_address );
+		vmap_del( inet_addr( tmp_address ) );
+	}
 	return 0;
 }
 

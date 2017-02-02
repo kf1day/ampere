@@ -19,5 +19,5 @@ read = security
 write = no
 ```
 
-The tool is not acting like a natural daemon (for now) and should be started via SystemD / SysV init script
+The tool is not acting like a natural UNIX daemon (for now) and should be started via SystemD / SysV init script
 
