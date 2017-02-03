@@ -3,6 +3,7 @@
 
 Dependencies:
 - libpcre3
+- libsqlite3
 
 example of asterisk's "manager.conf"
 
