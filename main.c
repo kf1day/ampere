@@ -27,11 +27,11 @@ sqlite3 *db;
 #include "conf.h"
 #include "vmap.h"
 
-static int db_create_callback( void *NotUsed, int argc, char **argv, char **azColName ) {
+static int db_create_callback( void *z, int argc, char **argv, char **col_name ) {
 	int i;
 	
 	for( i = 0; i < argc; i++ ) {
-		printf( "%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL" );
+		printf( "%s = %s\n", col_name[i], argv[i] ? argv[i] : "NULL" );
 	}
 	printf( "\n" );
 	return 0;
@@ -55,11 +55,15 @@ int process_msg( char *msg, int len ) {
 		#ifdef debug
 		printf( "%s -> %s\n", msg+ovc[2], msg+ovc[4] );
 		#endif
-		if ( _K( "Response" ) && _V( "Success" ) ) state += 0x01;
-		if ( _K( "Response" ) && _V( "Error" ) ) state += 0x02;
-		if ( _K( "Event" ) && _V( "SuccessfulAuth" ) ) state += 0x03;
-		if ( _K( "Event" ) && _V( "ChallengeSent" ) ) state += 0x04;
-		if ( _K( "Event" ) && _V( "ChallengeResponseFailed" ) ) state += 0x05;
+		if ( _K( "Response" ) ) {
+			if ( _V( "Success" ) ) state = 0x01;
+			if (_V( "Error" ) ) state = 0x02;
+		} else if ( _K( "Event" ) ) {
+			if ( _V( "SuccessfulAuth" ) ) state = 0x03;
+			if ( _V( "ChallengeSent" ) ) state = 0x04;
+			if ( _V( "ChallengeResponseFailed" ) ) state = 0x05;
+			if ( _V( "InvalidPassword" ) ) state = 0x06;
+		}
 		if ( _K( "ActionID" ) && _V( "AmpereX7E1" ) )	state += 0x10;
 		if ( _K( "AccountID" ) ) memcpy( tmp_account, msg+ovc[4], ovc[5] - ovc[4] + 1 );
 		if ( _K( "RemoteAddress" ) ) {
@@ -99,6 +103,7 @@ int process_msg( char *msg, int len ) {
 				break;
 			}
 		case 0x25:
+		case 0x26:
 			res = vmap_add( inet_addr( tmp_address ), 1 );
 			if ( res < 0 ) {
 				return res;
@@ -125,7 +130,7 @@ int process_msg( char *msg, int len ) {
 int main( int argc, char **argv ){
 	int sock, res, len;
 	struct sockaddr_in srv;
-	unsigned short buf_offset = 0;
+	uint8_t buf_offset = 0;
 	char *msg, *buf_start, *buf_end;
 	conf_t *cfg;
 
