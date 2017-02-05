@@ -24,8 +24,8 @@ const char *err;
 sqlite3 *db;
 
 
-#include "conf.h"
-#include "vmap.h"
+#include "inc/conf.c"
+#include "inc/vmap.c"
 
 static int db_create_callback( void *z, int argc, char **argv, char **col_name ) {
 	int i;
