@@ -13,27 +13,53 @@
 #define OVC_SZ 15
 
 // This will be cofigurable
-#define SUSS_COUNT 3
 #define DB_PATH "filter.sqlite"
+
 
 pcre *re_keyval;
 pcre *re_ipv4;
 int ovc[OVC_SZ];
 char *tmp_account, *tmp_address, *tmp_query;
 const char *err;
+
 sqlite3 *db;
 
 
 #include "inc/conf.c"
 #include "inc/vmap.c"
 
-static int db_create_callback( void *z, int argc, char **argv, char **col_name ) {
-	int i;
+static int db_write_callback( void *z, int argc, char **argv, char **col_name ) {
+/*	int i;
 	
 	for( i = 0; i < argc; i++ ) {
 		printf( "%s = %s\n", col_name[i], argv[i] ? argv[i] : "NULL" );
 	}
-	printf( "\n" );
+	printf( "\n" );*/
+	return 0;
+}
+
+static int db_read_callback( void *z, int argc, char **argv, char **col_name ) {
+	int i, res;
+	in_addr_t ip;
+	
+	for( i = 0; i < argc; i++ ) {
+		ip = atol( argv[i] );
+		if ( ip > 0 ) {
+			vmap_addr_to_string( ip, tmp_address );
+			#ifdef debug
+//			printf( "### >>>>>>>>>>\n" );
+			printf( "### Blocking %s during initialize\n", tmp_address );
+//			printf( "### <<<<<<<<<<\n" );
+			#endif
+			sprintf( tmp_query, "iptables -I %s 1 -s %s -j REJECT --reject-with icmp-port-unreachable", cfg->chain, tmp_address );
+			res = system( tmp_query );
+			if ( res != 0 ) {
+				printf( "WARNING: failed to insert rule via iptables\n" );
+			}			
+		} else {
+			printf( "WARNING: Cannot convert IP from database record: %s\n", argv[i] ? argv[i] : "NULL" );
+		}
+	}
 	return 0;
 }
 
@@ -46,14 +72,14 @@ int process_msg( char *msg, int len ) {
 
 	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	#ifdef debug
-	printf( "\n>>>>>>>>>>>>>>>>>>>>\n" );
+	printf( "### >>>>>>>>>>\n" );
 	#endif
 	while ( res == 3 ) {
 		*(msg+ovc[3]) = 0;
 		*(msg+ovc[5]) = 0;
 		re_offset = ovc[1];
 		#ifdef debug
-		printf( "%s -> %s\n", msg+ovc[2], msg+ovc[4] );
+		printf( "### %s -> %s\n", msg+ovc[2], msg+ovc[4] );
 		#endif
 		if ( _K( "Response" ) ) {
 			if ( _V( "Success" ) ) state = 0x01;
@@ -80,7 +106,7 @@ int process_msg( char *msg, int len ) {
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	}
 	#ifdef debug
-	printf( "<<<<<<<<<<<<<<<<<<<<\n\n" );
+	printf( "### <<<<<<<<<<\n" );
 	#endif
 	
 	res = 0;
@@ -115,25 +141,29 @@ int process_msg( char *msg, int len ) {
 			printf( "WARNING: Cannot parse IP for account %s: %s\n", tmp_account, tmp_address );
 			break;
 	}
-	if ( res >= 5 * SUSS_COUNT ) {
+	if ( res >= 5 * cfg->loyalty ) {
+		printf( "Blocking addres %s\n", tmp_address );
 		sprintf( tmp_query, "INSERT OR REPLACE INTO filter(addr, id) VALUES (%ld, \"%s\");", (long int)inet_addr( tmp_address ), tmp_account );
-		res = sqlite3_exec( db, tmp_query, db_create_callback, 0, (char **)&err );
+		res = sqlite3_exec( db, tmp_query, db_write_callback, 0, (char **)&err );
 		if ( res != SQLITE_OK ) {
 			fprintf( stderr, "ERROR (SQL): %s\n", err );
 			return -1;
+		}
+		sprintf( tmp_query, "iptables -I %s 1 -s %s -j REJECT --reject-with icmp-port-unreachable", cfg->chain, tmp_address );
+		res = system( tmp_query );
+		if ( res != 0 ) {
+			printf( "WARNING: failed to insert rule via iptables\n" );
 		}
 		vmap_del( inet_addr( tmp_address ) );
 	}
 	return 0;
 }
 
-int main( int argc, char **argv ){
+int main( int argc, char **argv ) {
 	int sock, res, len;
 	struct sockaddr_in srv;
 	uint8_t buf_offset = 0;
 	char *msg, *buf_start, *buf_end;
-	conf_t *cfg;
-
 	
 	// init REGEXP parser
 	re_keyval = pcre_compile( "(.*): (.*)\r\n", 0, &err, &res, NULL );
@@ -149,14 +179,23 @@ int main( int argc, char **argv ){
 	
 	// read config
 	cfg = malloc( sizeof( conf_t ) );
-	cfg->host = 0x0100007F; // 127.0.0.1, little endian
+	cfg->host = 0x0100007F; // 127.0.0.1, octet-reversed
 	cfg->port = 5038;
+	cfg->loyalty = 3;
 	strcpy( cfg->user, "ampere" );
 	strcpy( cfg->pass, "ampere" );
-	res = conf_load( cfg );
+	strcpy( cfg->chain, "ampere" );
+	res = conf_load();
 	if ( res < 0 ) {
 		return res;
 	}
+	
+	// init VARS
+	tmp_account = malloc( STR_SZ );
+	tmp_address = malloc( STR_SZ );
+	tmp_query = malloc( STR_SZ );
+	msg = malloc( MSG_SZ * 2 );
+	memset( &vmap, 0, sizeof( vmap ) );
 	
 	// init SQLITE
 	res = sqlite3_open( DB_PATH, &db );
@@ -164,7 +203,19 @@ int main( int argc, char **argv ){
 		fprintf( stderr, "FATAL: Could not open database\n" );
 		return -2;
 	}
-	res = sqlite3_exec( db, "CREATE TABLE IF NOT EXISTS filter( addr INT PRIMARY KEY NOT NULL, id TEXT );", db_create_callback, 0, (char **)&err );
+	res = sqlite3_exec( db, "CREATE TABLE IF NOT EXISTS filter( addr INT PRIMARY KEY NOT NULL, id TEXT );", db_write_callback, 0, (char **)&err );
+	if ( res != SQLITE_OK ) {
+		fprintf( stderr, "ERROR (SQL): %s\n", err );
+		sqlite3_close( db );
+		return -1;
+	}
+	
+	// apply initial fw rules
+	sprintf( tmp_query, "iptables -F %s", cfg->chain );
+	system( tmp_query );
+	sprintf( tmp_query, "iptables -A %s -j RETURN", cfg->chain );
+	system( tmp_query );
+	res = sqlite3_exec( db, "SELECT addr FROM filter;", db_read_callback, 0, (char **)&err );
 	if ( res != SQLITE_OK ) {
 		fprintf( stderr, "ERROR (SQL): %s\n", err );
 		sqlite3_close( db );
@@ -185,18 +236,12 @@ int main( int argc, char **argv ){
 	// connect to AMI
 	res = connect( sock, ( struct sockaddr* ) &srv, sizeof( srv ) );
 	if ( res < 0 ) {
-		fprintf( stderr, "ERROR: Cannot connect to remote server\n" );
+		vmap_addr_to_string( cfg->host, tmp_address );
+		fprintf( stderr, "ERROR: Cannot connect to remote server %s:%d\n", tmp_address, cfg->port );
 		shutdown( sock, SHUT_RDWR );
 		sqlite3_close( db );
 		return -1;
 	}
-	
-	// init VARS
-	tmp_account = malloc( STR_SZ );
-	tmp_address = malloc( STR_SZ );
-	tmp_query = malloc( STR_SZ );
-	msg = malloc( MSG_SZ * 2 );
-	memset( &vmap, 0, sizeof( vmap ) );
 	
 	// send AUTH message
 	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\nActionID: AmpereX7E1\r\n\r\n", cfg->user, cfg->pass );

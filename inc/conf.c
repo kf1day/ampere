@@ -4,16 +4,20 @@
 
 typedef struct {
 	in_addr_t host;
-	char user[32], pass[32];
-	unsigned short int port;
+	char user[STR_SZ], pass[STR_SZ], chain[STR_SZ];
+	uint16_t port;
+	uint8_t loyalty;
 } conf_t;
+
+
+conf_t *cfg;
 
 
 /*******************
  *    INTERFACE    *
  *******************/
 int conf_readln( FILE *fd, char *buf );
-int conf_load( conf_t *cfg );
+int conf_load();
 
 
 /*******************
@@ -38,7 +42,7 @@ int conf_readln( FILE *fd, char *buf ) {
 	return i;
 }
 
-int conf_load( conf_t *cfg ) {
+int conf_load() {
 	#define _IS( S ) strcmp( ln+ovc[2], S ) == 0
 	char *ln = malloc( CONF_STR_SZ );
 	int res;
@@ -50,7 +54,7 @@ int conf_load( conf_t *cfg ) {
 		fprintf( stderr, "ERROR: Cannot open config file: %s\n", CONF_FILE );
 		return -1;
 	}
-	re_cfg_keyval = pcre_compile( "^([^=#;\\s]*)\\s*=\\s*(.*)$", 0, &err, &res, NULL );
+	re_cfg_keyval = pcre_compile( "^\\s*([^=\\s]*)\\s*=\\s*(.*)[#;]*", 0, &err, &res, NULL );
 	if ( !re_cfg_keyval ) {
 		fprintf( stderr, "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
 		return -2;
@@ -65,12 +69,34 @@ int conf_load( conf_t *cfg ) {
 				*(ln+ovc[5]) = 0;
 				if ( _IS( "host" ) ) {
 					cfg->host = inet_addr( ln+ovc[4] );
+					#ifdef debug
+					printf( "### Config: host is %s\n", ln+ovc[4] );
+					#endif
 				} else if ( _IS( "port" ) ) {
-					cfg->port = atoi( ln+ovc[4] );
+					cfg->port = atoi( ln+ovc[4] ) > 0 ? atoi( ln+ovc[4] ) : 5038;
+					#ifdef debug
+					printf( "### Config: port is %d\n", cfg->port );
+					#endif
+				} else if ( _IS( "loyalty" ) ) {
+					cfg->loyalty = atoi( ln+ovc[4] ) > 0 ? atoi( ln+ovc[4] ) : 3;
+					#ifdef debug
+					printf( "### Config: loyalty is %d\n", cfg->loyalty );
+					#endif
 				} else if ( _IS( "user" ) ) {
 					strcpy( cfg->user, ln+ovc[4] );
+					#ifdef debug
+					printf( "### Config: user is %s\n", cfg->user );
+					#endif
 				} else if ( _IS( "pass" ) ) {
 					strcpy( cfg->pass, ln+ovc[4] );
+					#ifdef debug
+					printf( "### Config: pass is %s\n", cfg->pass );
+					#endif
+				} else if ( _IS( "chain" ) ) {
+					strcpy( cfg->chain, ln+ovc[4] );
+					#ifdef debug
+					printf( "### Config: chain is %s\n", cfg->chain );
+					#endif
 				}
 			}
 		}
