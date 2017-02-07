@@ -3,12 +3,13 @@ A small tool to protect Asterisk installations against scanning and bruteforcing
 
 
 ## Synopsis
-Application subscripes Asterisk's Management Interface (AMI) security events.
-There is a table of fines for each host, which increases on any suspicious activity, increament depends on status of event.
-Legal event (such as successful auth) removes fines.
-If fines are too high, host is blocking in configured chain via `iptables` syscall.
-Each violator stores in sqlite database.
-Chain is flushing on application start, then stored rules are set.
+Application subscribes Asterisk's Management Interface (AMI) security events.
+There is a table of penalties for each host.
+In case of any suspicious activity the penalty raises, increment depends on the status of event.
+Legal event (such as successful auth) removes penalties.
+If penalties are too high, host is blocking in configured chain via `iptables` syscall.
+Each violator is stored in SQLite database.
+Chain is flushing on application start, then saved rules are applying again.
 
 
 ## Dependencies:
@@ -26,6 +27,7 @@ Chain is flushing on application start, then stored rules are set.
 ## Installation
 * Put `ampere.cfg` into `/etc/ampere/`
 * Put executable anywhere you want, e.g. `/usr/lib/ampere/`
+
 The tool is not acting like a natural UNIX daemon (for now) and should be started via SystemD / SysV init script.
 
 #### Example of *ampere.service* for systemd:
