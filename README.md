@@ -20,7 +20,9 @@ Chain is flushing on application start, then saved rules are applying again.
 
 ## Building
 `make` - build unstripped executable
+
 `make debug` - build unstripped executable with extra "debug" output (such as parsed config variables, recived messages, etc)
+
 `make nice` - build stripped executable with optimization "-O3" flag
 
 
