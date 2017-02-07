@@ -1,6 +1,7 @@
 # Ampere 
 A small tool to protect Asterisk installations against scanning and bruteforcing.
 
+
 ## Synopsis
 Application subscripes Asterisk's Management Interface (AMI) security events.
 There is a table of fines for each host, which increases on any suspicious activity, increament depends on status of event.
@@ -9,21 +10,25 @@ If fines are too high, host is blocking in configured chain via `iptables` sysca
 Each violator stores in sqlite database.
 Chain is flushing on application start, then stored rules are set.
 
+
 ## Dependencies:
 - libpcre3
 - libsqlite3
 - iptables
+
 
 ## Building
 `make` - build unstripped executable
 `make debug` - build unstripped executable with extra "debug" output (such as parsed config variables, recived messages, etc)
 `make nice` - build stripped executable with optimization "-O3" flag
 
+
 ## Installation
-*Put `ampere.cfg` into `/etc/ampere/`
-*Put executable anywhere you want, e.g. `/usr/lib/ampere/`
+* Put `ampere.cfg` into `/etc/ampere/`
+* Put executable anywhere you want, e.g. `/usr/lib/ampere/`
 The tool is not acting like a natural UNIX daemon (for now) and should be started via SystemD / SysV init script.
-#### Example of `ampere.service` for systemd:
+
+#### Example of *ampere.service* for systemd:
 ```
 [Unit]
 Description=Ampere 
@@ -42,11 +47,13 @@ ExecStart=/usr/lib/ampere/ampere
 WantedBy=multi-user.target
 ```
 
+
 ## Configuring
 The main task of Ampere is control firewall rules in specified chain.
 When application starts, chain should exist and jumping to a chain also should be configured.
 Last rule is always `RETURN`.
-#### Example of `iptables -S` output:
+
+#### Example of *iptables -S* output:
 ```
 -P INPUT ACCEPT
 -P FORWARD ACCEPT
@@ -58,12 +65,19 @@ Last rule is always `RETURN`.
 ```
 
 Application reads config from `/etc/ampere/ampere.cfg`, options are:
+
 `host` - AMI interface address (default: 127.0.0.1). Due to `iptables` implements locally, it make sence to use only loopback addresses
+
 `port` - AMI interface port (default: 5038)
+
 `user` - AMI interface login (default: ampere)
+
 `pass` - AMI interface secret (default: ampere)
+
 `loyalty` - Multiplier for fines upper limit (default: 3). In most cases than mean number of allowed authentication attempts.
+
 `chain` - name of chain in firewall table (default: ampere).
+
 #### Example of ampere.cfg:
 ```
 pass = 123
@@ -72,6 +86,7 @@ chain = ampere-firewall
 ```
 
 AMI also should be configured for accept connections and sent security events
+
 #### Example of asterisk's "manager.conf"
 ```
 [general]
@@ -89,9 +104,10 @@ write = no
 Then reload asterisk:
 `asterisk -x "manager reload"`
 
+
 ## Prerequisites
 Ampere was tested and successfuly used:
 * Asterisk 13.13 (production/dedicated)
-* OS Debian 8.6 with 3.16.0-4-amd64
+* OS Debian 8.6 with kernel 3.16.0-4-amd64
 * gcc version 4.9.2
 
