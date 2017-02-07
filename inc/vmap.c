@@ -31,10 +31,8 @@ int vmap_add( in_addr_t addr, int8_t inc ) {
 	if ( find < 0 ) {
 		vmap[vmap_index].addr = addr;
 		vmap[vmap_index].fine = inc;
-		#ifdef debug
-//		printf( "### >>>>>>>>>>\n" );
+		#ifdef DEBUG_FLAG
 		printf( "### Set fine %d to 0x%X at pos %d\n", inc, addr, vmap_index );
-//		printf( "### <<<<<<<<<<\n" );
 		#endif
 		if ( vmap[vmap_index].next > 0 ) {
 			vmap_index = vmap[vmap_index].next;
@@ -46,10 +44,8 @@ int vmap_add( in_addr_t addr, int8_t inc ) {
 		}
 	} else {
 		vmap[find].fine += inc;
-		#ifdef debug
-//		printf( "### >>>>>>>>>>\n" );
+		#ifdef DEBUG_FLAG
 		printf( "### Set fine %d to 0x%X at pos %d\n", vmap[find].fine, addr, find );
-//		printf( "### <<<<<<<<<<\n" );
 		#endif
 		if ( vmap[find].fine < 0 ) {
 			return 0;
@@ -75,10 +71,8 @@ int vmap_del( in_addr_t addr ) {
 		vmap[find].fine = 0;
 		vmap[find].next = vmap_index;
 		vmap_index = find;
-		#ifdef debug
-//		printf( "### >>>>>>>>>>\n" );
+		#ifdef DEBUG_FLAG
 		printf( "### Drop fines from 0x%X at pos %d\n", addr, find );
-//		printf( "### <<<<<<<<<<\n" );
 		#endif
 	}
 	return 0;

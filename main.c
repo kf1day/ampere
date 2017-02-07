@@ -46,10 +46,8 @@ static int db_read_callback( void *z, int argc, char **argv, char **col_name ) {
 		ip = atol( argv[i] );
 		if ( ip > 0 ) {
 			vmap_addr_to_string( ip, tmp_address );
-			#ifdef debug
-//			printf( "### >>>>>>>>>>\n" );
+			#ifdef DEBUG_FLAG
 			printf( "### Blocking %s during initialize\n", tmp_address );
-//			printf( "### <<<<<<<<<<\n" );
 			#endif
 			sprintf( tmp_query, "iptables -I %s 1 -s %s -j REJECT --reject-with icmp-port-unreachable", cfg->chain, tmp_address );
 			res = system( tmp_query );
@@ -71,14 +69,14 @@ int process_msg( char *msg, int len ) {
 	uint8_t state = 0;
 
 	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
-	#ifdef debug
+	#ifdef DEBUG_FLAG
 	printf( "### >>>>>>>>>>\n" );
 	#endif
 	while ( res == 3 ) {
 		*(msg+ovc[3]) = 0;
 		*(msg+ovc[5]) = 0;
 		re_offset = ovc[1];
-		#ifdef debug
+		#ifdef DEBUG_FLAG
 		printf( "### %s -> %s\n", msg+ovc[2], msg+ovc[4] );
 		#endif
 		if ( _K( "Response" ) ) {
@@ -105,7 +103,7 @@ int process_msg( char *msg, int len ) {
 		}
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	}
-	#ifdef debug
+	#ifdef DEBUG_FLAG
 	printf( "### <<<<<<<<<<\n" );
 	#endif
 	
