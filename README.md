@@ -9,7 +9,7 @@ In case of any suspicious activity the penalty raises, increment depends on the 
 Legal event (such as successful auth) removes penalties.
 If penalties are too high, host is blocking in configured chain via `iptables` syscall.
 Each violator is stored in SQLite database.
-Chain is flushing on application start, then saved rules are applying again.
+Chain is flushing on application start, then saved rules are applying back again.
 
 
 ## Dependencies:
@@ -70,7 +70,7 @@ Last rule is always `RETURN`.
 
 Application reads config from `/etc/ampere/ampere.cfg`, options are:
 
-`host` - AMI interface address (default: 127.0.0.1). Due to `iptables` implements locally, it make sence to use only loopback addresses
+`host` - AMI interface address (default: 127.0.0.1). Due to `iptables` executes locally, it makes sense to only use loopback addresses
 
 `port` - AMI interface port (default: 5038)
 
