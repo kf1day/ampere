@@ -28,28 +28,22 @@ sqlite3 *db;
 #include "inc/conf.c"
 #include "inc/vmap.c"
 
-static int db_write_callback( void *z, int argc, char **argv, char **col_name ) {
-/*	int i;
-	
-	for( i = 0; i < argc; i++ ) {
-		printf( "%s = %s\n", col_name[i], argv[i] ? argv[i] : "NULL" );
-	}
-	printf( "\n" );*/
+int db_write_callback( void *z, int argc, char **argv, char **col_name ) {
 	return 0;
 }
 
-static int db_read_callback( void *z, int argc, char **argv, char **col_name ) {
+int db_read_callback( void *z, int argc, char **argv, char **col_name ) {
 	int i, res;
 	in_addr_t ip;
 	
 	for( i = 0; i < argc; i++ ) {
 		ip = atol( argv[i] );
 		if ( ip > 0 ) {
-			vmap_addr_to_string( ip, tmp_address );
+			vmap_itos( ip, tmp_address );
 			#ifdef DEBUG_FLAG
-			printf( "### Blocking %s during initialize\n", tmp_address );
+			printf( " - Blocking %s during startup\n", tmp_address );
 			#endif
-			sprintf( tmp_query, "iptables -I %s 1 -s %s -j REJECT --reject-with icmp-port-unreachable", cfg->chain, tmp_address );
+			sprintf( tmp_query, "iptables -I %s 1 -s %s -j REJECT --reject-with icmp-port-unreachable 2>/dev/null", cfg->chain, tmp_address );
 			res = system( tmp_query );
 			if ( res != 0 ) {
 				printf( "WARNING: failed to insert rule via iptables\n" );
@@ -67,79 +61,117 @@ int process_msg( char *msg, int len ) {
 	#define _V( S ) strcmp( msg+ovc[4], S ) == 0
 	int res, re_offset = 0;
 	uint8_t state = 0;
+	vmap_t *vx;
 
 	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	#ifdef DEBUG_FLAG
-	printf( "### >>>>>>>>>>\n" );
+//	printf( ".\n" );
 	#endif
 	while ( res == 3 ) {
 		*(msg+ovc[3]) = 0;
 		*(msg+ovc[5]) = 0;
 		re_offset = ovc[1];
 		#ifdef DEBUG_FLAG
-		printf( "### %s -> %s\n", msg+ovc[2], msg+ovc[4] );
+		printf( " > %s -> %s\n", msg+ovc[2], msg+ovc[4] );
 		#endif
 		if ( _K( "Response" ) ) {
-			if ( _V( "Success" ) ) state = 0x01;
-			if (_V( "Error" ) ) state = 0x02;
+			if ( _V( "Success" ) ) state = 0x88;
+			if (_V( "Error" ) ) state = 0x80;
 		} else if ( _K( "Event" ) ) {
-			if ( _V( "SuccessfulAuth" ) ) state = 0x03;
-			if ( _V( "ChallengeSent" ) ) state = 0x04;
-			if ( _V( "ChallengeResponseFailed" ) ) state = 0x05;
-			if ( _V( "InvalidPassword" ) ) state = 0x06;
+			if ( _V( "SuccessfulAuth" ) ) state = 0x10;
+			if ( _V( "ChallengeResponseFailed" ) ) state = 0x20;
+			if ( _V( "InvalidPassword" ) ) state = 0x20;
+			if ( _V( "ChallengeSent" ) ) state = 0x40;
 		}
-		if ( _K( "ActionID" ) && _V( "AmpereX7E1" ) )	state += 0x10;
-		if ( _K( "AccountID" ) ) memcpy( tmp_account, msg+ovc[4], ovc[5] - ovc[4] + 1 );
-		if ( _K( "RemoteAddress" ) ) {
-			memcpy( tmp_address, msg+ovc[4], ovc[5] - ovc[4] + 1 );
-			res = pcre_exec( re_ipv4, NULL, tmp_address, ovc[5] - ovc[4], 0, 0, ovc, OVC_SZ );
-			if ( res == 3 ) {
-				memcpy( tmp_address, tmp_address + ovc[4], ovc[5] - ovc[4] );
-				*(tmp_address+ovc[5]-ovc[4]) = 0;
-				state += 0x20;
-			} else {
-				state += 0x40;
+		if ( state & 0x70 ) {
+			if ( _K( "AccountID" ) ) {
+				memcpy( tmp_account, msg+ovc[4], ovc[5] - ovc[4] + 1 );
+				state |= 0x01;
+			} else if ( _K( "RemoteAddress" ) ) {
+				memcpy( tmp_address, msg+ovc[4], ovc[5] - ovc[4] + 1 );
+				res = pcre_exec( re_ipv4, NULL, tmp_address, ovc[5] - ovc[4], 0, 0, ovc, OVC_SZ );
+				if ( res == 3 ) {
+					memcpy( tmp_address, tmp_address + ovc[4], ovc[5] - ovc[4] );
+					*(tmp_address+ovc[5]-ovc[4]) = 0;
+					state |= 0x02;
+				} else {
+					state |= 0x04;
+				}
 			}
 		}
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	}
 	#ifdef DEBUG_FLAG
-	printf( "### <<<<<<<<<<\n" );
+//	printf( ".\n" );
 	#endif
 	
 	res = 0;
+	
+	#ifdef DEBUG_FLAG
+	printf( " - State is 0x%X, account: \"%s\", address: \"%s\"\n", state, tmp_account, tmp_address );
+	#endif
 
 	switch ( state ) {
-		case 0x11:
+		case 0x88:
 			printf( "Authentication accepted\n" );
-			break;
-		case 0x12:
+			return 0;
+		case 0x80:
 			fprintf( stderr, "ERROR: Authentication failed\n" );
 			return -1;
-		case 0x23:
-			res = vmap_del( inet_addr( tmp_address ) );
-			break;
-		case 0x24:
-			res = vmap_add( inet_addr( tmp_address ), 4 );
-			if ( res < 0 ) {
-				return res;
-			} else {
-				break;
+		case 0x10: // SuccessfulAuth -RemoteAddress -AccountID
+		case 0x11: // SuccessfulAuth -RemoteAddress +AccountID
+		case 0x20: // InvalidPassword/ChallengeResponseFailed -RemoteAddress -AccountID
+		case 0x21: // InvalidPassword/ChallengeResponseFailed -RemoteAddress +AccountID
+		case 0x40: // ChallengeSent -RemoteAddress -AccountID
+		case 0x41: // ChallengeSent -RemoteAddress +AccountID
+			printf( "WARNING: Incomplete message - RemoteAddress not specified (0x%X)\n", state );
+			return 0;
+		case 0x12: // SuccessfulAuth +RemoteAddress -AccountID
+		case 0x22: // InvalidPassword/ChallengeResponseFailed +RemoteAddress -AccountID
+		case 0x42: // ChallengeSent +RemoteAddress -AccountID
+			printf( "WARNING: Incomplete message - AccountID not specified\n" );
+		case 0x13: // SuccessfulAuth +RemoteAddress +AccountID
+		case 0x23: // InvalidPassword/ChallengeResponseFailed +RemoteAddress +AccountID
+		case 0x43: // ChallengeSent +RemoteAddress +AccountID
+			vx = vmap_get( inet_addr( tmp_address ) );
+			if ( !vx ) {
+				fprintf( stderr, "FATAL: VMAP exhausted\n" );
+				return -2;
 			}
-		case 0x25:
-		case 0x26:
-			res = vmap_add( inet_addr( tmp_address ), 1 );
-			if ( res < 0 ) {
-				return res;
-			} else {
-				break;
+			if ( ( state & 0x10 ) == 0x10 ) {
+				res = vmap_del( vx );
+				if ( res < 0 ) {
+					fprintf( stderr, "FATAL: VX index out of bounds\n" );
+					return -2;
+				}
+			} else if ( ( state & 0x20 ) == 0x20 ) {
+				vx->penalty++;
+				res = vx->penalty;
+			} else if ( ( state & 0x40 ) == 0x40 ) {
+				if ( vx->penalty % 5 == 4 ) {
+					vx->penalty += 10;
+				} else {
+					vx->penalty += 4;
+				}
+				res = vx->penalty;
 			}
-		case 0x43:
-		case 0x44:
-			printf( "WARNING: Cannot parse IP for account %s: %s\n", tmp_account, tmp_address );
 			break;
+		case 0x14: // SuccessfulAuth +RemoteAddress:Invalid -AccountID
+		case 0x24: // InvalidPassword/ChallengeResponseFailed +RemoteAddress:Invalid -AccountID
+		case 0x44: // ChallengeSent +RemoteAddress:Invalid -AccountID
+			printf( "WARNING: Cannot parse IP address: %s\n", tmp_address );
+			return 0;
+		case 0x15: // SuccessfulAuth +RemoteAddress:Invalid +AccountID
+		case 0x25: // InvalidPassword/ChallengeResponseFailed +RemoteAddress:Invalid +AccountID
+		case 0x45: // ChallengeSent +RemoteAddress:Invalid +AccountID
+			printf( "WARNING: Cannot parse IP address for account \"%s\": %s\n", tmp_account, tmp_address );
+			return 0;
 	}
-	if ( res >= 5 * cfg->loyalty ) {
+	#ifdef DEBUG_FLAG
+	printf( " - Penalty is: %d\n", res );
+	#endif
+
+	if ( 5 * cfg->loyalty <= res ) {
 		printf( "Blocking addres %s\n", tmp_address );
 		sprintf( tmp_query, "INSERT OR REPLACE INTO filter(addr, id) VALUES (%ld, \"%s\");", (long int)inet_addr( tmp_address ), tmp_account );
 		res = sqlite3_exec( db, tmp_query, db_write_callback, 0, (char **)&err );
@@ -147,12 +179,12 @@ int process_msg( char *msg, int len ) {
 			fprintf( stderr, "ERROR (SQL): %s\n", err );
 			return -1;
 		}
-		sprintf( tmp_query, "iptables -I %s 1 -s %s -j REJECT --reject-with icmp-port-unreachable", cfg->chain, tmp_address );
+		sprintf( tmp_query, "iptables -I %s 1 -s %s -j REJECT --reject-with icmp-port-unreachable 2>/dev/null", cfg->chain, tmp_address );
 		res = system( tmp_query );
 		if ( res != 0 ) {
 			printf( "WARNING: failed to insert rule via iptables\n" );
 		}
-		vmap_del( inet_addr( tmp_address ) );
+		vmap_del( vx );
 	}
 	return 0;
 }
@@ -209,9 +241,9 @@ int main( int argc, char **argv ) {
 	}
 	
 	// apply initial fw rules
-	sprintf( tmp_query, "iptables -F %s", cfg->chain );
+	sprintf( tmp_query, "iptables -F %s 2>/dev/null", cfg->chain );
 	system( tmp_query );
-	sprintf( tmp_query, "iptables -A %s -j RETURN", cfg->chain );
+	sprintf( tmp_query, "iptables -A %s -j RETURN 2>/dev/null", cfg->chain );
 	system( tmp_query );
 	res = sqlite3_exec( db, "SELECT addr FROM filter;", db_read_callback, 0, (char **)&err );
 	if ( res != SQLITE_OK ) {
@@ -234,7 +266,7 @@ int main( int argc, char **argv ) {
 	// connect to AMI
 	res = connect( sock, ( struct sockaddr* ) &srv, sizeof( srv ) );
 	if ( res < 0 ) {
-		vmap_addr_to_string( cfg->host, tmp_address );
+		vmap_itos( cfg->host, tmp_address );
 		fprintf( stderr, "ERROR: Cannot connect to remote server %s:%d\n", tmp_address, cfg->port );
 		shutdown( sock, SHUT_RDWR );
 		sqlite3_close( db );
@@ -242,7 +274,7 @@ int main( int argc, char **argv ) {
 	}
 	
 	// send AUTH message
-	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\nActionID: AmpereX7E1\r\n\r\n", cfg->user, cfg->pass );
+	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\n\r\n", cfg->user, cfg->pass );
 	res = send( sock, msg, strlen( msg ), 0 );
 	if ( res < 0 ) {
 		fprintf( stderr, "FATAL: Send failed\n" );

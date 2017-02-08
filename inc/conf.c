@@ -70,32 +70,32 @@ int conf_load() {
 				if ( _IS( "host" ) ) {
 					cfg->host = inet_addr( ln+ovc[4] );
 					#ifdef DEBUG_FLAG
-					printf( "### Config: host is %s\n", ln+ovc[4] );
+					printf( " - Config: host is %s\n", ln+ovc[4] );
 					#endif
 				} else if ( _IS( "port" ) ) {
 					cfg->port = atoi( ln+ovc[4] ) > 0 ? atoi( ln+ovc[4] ) : 5038;
 					#ifdef DEBUG_FLAG
-					printf( "### Config: port is %d\n", cfg->port );
+					printf( " - Config: port is %d\n", cfg->port );
 					#endif
 				} else if ( _IS( "loyalty" ) ) {
 					cfg->loyalty = atoi( ln+ovc[4] ) > 0 ? atoi( ln+ovc[4] ) : 3;
 					#ifdef DEBUG_FLAG
-					printf( "### Config: loyalty is %d\n", cfg->loyalty );
+					printf( " - Config: loyalty is %d\n", cfg->loyalty );
 					#endif
 				} else if ( _IS( "user" ) ) {
 					strcpy( cfg->user, ln+ovc[4] );
 					#ifdef DEBUG_FLAG
-					printf( "### Config: user is %s\n", cfg->user );
+					printf( " - Config: user is %s\n", cfg->user );
 					#endif
 				} else if ( _IS( "pass" ) ) {
 					strcpy( cfg->pass, ln+ovc[4] );
 					#ifdef DEBUG_FLAG
-					printf( "### Config: pass is %s\n", cfg->pass );
+					printf( " - Config: pass is %s\n", cfg->pass );
 					#endif
 				} else if ( _IS( "chain" ) ) {
 					strcpy( cfg->chain, ln+ovc[4] );
 					#ifdef DEBUG_FLAG
-					printf( "### Config: chain is %s\n", cfg->chain );
+					printf( " - Config: chain is %s\n", cfg->chain );
 					#endif
 				}
 			}

@@ -3,7 +3,7 @@
 
 typedef struct {
 	in_addr_t addr;
-	int16_t fine;
+	int16_t penalty;
 	uint16_t next;
 } vmap_t;
 
@@ -15,82 +15,65 @@ vmap_t vmap[VMAP_SZ];
 /*******************
  *    INTERFACE    *
  *******************/
-int vmap_add( in_addr_t addr, int8_t inc );
-int vmap_del( in_addr_t addr );
-int vmap_find_addr( in_addr_t addr );
-void vmap_addr_to_string( in_addr_t addr, char *addr_str );
-
+int vmap_del( vmap_t *vmap_offset );
+vmap_t* vmap_get( in_addr_t addr );
+void vmap_itos( in_addr_t addr, char *addr_str );
 
 /*******************
  *  IPLEMENTATION  *
  *******************/
-int vmap_add( in_addr_t addr, int8_t inc ) {
-	int find;
+int vmap_del( vmap_t *vmap_offset ) {
+	int index;
 	
-	find = vmap_find_addr( addr );
-	if ( find < 0 ) {
-		vmap[vmap_index].addr = addr;
-		vmap[vmap_index].fine = inc;
+	index = ( vmap_offset - vmap ) / sizeof( vmap_t );
+	if ( 0 <= index && index < VMAP_SZ ) {
+		vmap[index].addr = 0;
+		vmap[index].next = vmap_index;
+		vmap_index = index;
 		#ifdef DEBUG_FLAG
-		printf( "### Set fine %d to 0x%X at pos %d\n", inc, addr, vmap_index );
+		printf( " - Remove existing VX at index %d\n", index );
 		#endif
-		if ( vmap[vmap_index].next > 0 ) {
-			vmap_index = vmap[vmap_index].next;
-		} else if ( vmap_index < VMAP_SZ - 2 ) {
-			vmap_index++;
-		} else {
-			fprintf( stderr, "FATAL: Array of VMap exhausted\n" );
-			return -2;
-		}
-	} else {
-		vmap[find].fine += inc;
-		#ifdef DEBUG_FLAG
-		printf( "### Set fine %d to 0x%X at pos %d\n", vmap[find].fine, addr, find );
-		#endif
-		if ( vmap[find].fine < 0 ) {
-			return 0;
-		} else {
-			return vmap[find].fine;
-		}
-	}
-	if ( inc < 0 ) {
 		return 0;
 	} else {
-		return inc;
-	}
-}
-
-int vmap_del( in_addr_t addr ) {
-	int find;
-
-	find = vmap_find_addr( addr );
-	if ( find < 0 ) {
-		return -1;
-	} else {
-		vmap[find].addr = 0;
-		vmap[find].fine = 0;
-		vmap[find].next = vmap_index;
-		vmap_index = find;
 		#ifdef DEBUG_FLAG
-		printf( "### Drop fines from 0x%X at pos %d\n", addr, find );
+		printf( " - Index out of bounds: %d\n", index );
 		#endif
+		return -1;
 	}
-	return 0;
 }
 
-int vmap_find_addr( in_addr_t addr ) {
+vmap_t* vmap_get( in_addr_t addr ) {
 	uint16_t i;
 		
 	for ( i = 0; i < VMAP_SZ; i++ ) {
 		if ( vmap[i].addr == addr ) {
-			return i;
+			#ifdef DEBUG_FLAG
+			printf( " - Got existing VX at index %d\n", i );
+			#endif
+			return &vmap[i];
 		}
 	}
-	return -1;
+	i = vmap_index;
+	if ( i < VMAP_SZ ) {
+		if ( vmap[i].next == 0 ) {
+			vmap_index++;
+		} else {
+			vmap_index = vmap[i].next;
+		}
+		#ifdef DEBUG_FLAG
+		printf( " - Initialled new VX at index %d\n", i );
+		#endif
+		vmap[i].addr = addr;
+		vmap[i].penalty = 0;
+		vmap[i].next = 0;
+		return &vmap[i];
+	} else {
+		return NULL;
+	}
 	
 }
 
-void vmap_addr_to_string( in_addr_t addr, char *addr_str ) {
+void vmap_itos( in_addr_t addr, char *addr_str ) {
 	uint8_t o[4];
 	
 	o[0] = addr / 0x1000000;
