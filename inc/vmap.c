@@ -19,13 +19,14 @@ int vmap_del( vmap_t *vmap_offset );
 vmap_t* vmap_get( in_addr_t addr );
 void vmap_itos( in_addr_t addr, char *addr_str );
 
+
 /*******************
  *  IPLEMENTATION  *
  *******************/
 int vmap_del( vmap_t *vmap_offset ) {
 	int index;
 	
-	index = ( vmap_offset - vmap ) / sizeof( vmap_t );
+	index = vmap_offset - vmap;
 	if ( 0 <= index && index < VMAP_SZ ) {
 		vmap[index].addr = 0;
 		vmap[index].next = vmap_index;
@@ -35,9 +36,6 @@ int vmap_del( vmap_t *vmap_offset ) {
 		#endif
 		return 0;
 	} else {
-		#ifdef DEBUG_FLAG
-		printf( " - Index out of bounds: %d\n", index );
-		#endif
 		return -1;
 	}
 }

@@ -1,5 +1,5 @@
 # Ampere 
-A small tool to protect Asterisk installations against scanning and bruteforcing.
+A small tool to protect Asterisk PBX against scanning and bruteforcing.
 
 
 ## Synopsis
@@ -45,7 +45,7 @@ TimeoutSec=120
 
 SyslogIdentifier=ampere
 
-ExecStart=/usr/lib/ampere/ampere
+ExecStart=/usr/lib/ampere/ampere -d /var/lib/ampere/filter.sqlite
 
 [Install]
 WantedBy=multi-user.target
@@ -54,8 +54,7 @@ WantedBy=multi-user.target
 
 ## Configuring
 The main task of Ampere is control firewall rules in specified chain.
-When application starts, chain should exist and jumping to a chain also should be configured.
-Last rule is always `RETURN`.
+When application starts, chain should exist and jumping into a chain also should be configured.
 
 #### Example of *iptables -S* output:
 ```
@@ -68,7 +67,9 @@ Last rule is always `RETURN`.
 -A INPUT -i eth0 -j DROP
 ```
 
-Application reads config from `/etc/ampere/ampere.cfg`, options are:
+By default, application reads config from `/etc/ampere/ampere.cfg`. This can be overriden by setting `-c <path/to/file.sqlite>` argument
+
+The options are:
 
 `host` - AMI interface address (default: 127.0.0.1). Due to `iptables` executes locally, it makes sense to only use loopback addresses
 
@@ -78,11 +79,11 @@ Application reads config from `/etc/ampere/ampere.cfg`, options are:
 
 `pass` - AMI interface secret (default: ampere)
 
-`loyalty` - Multiplier for fines upper limit (default: 3). In most cases than mean number of allowed authentication attempts.
+`loyalty` - Multiplier for penalties upper limit (default: 3). In most cases than mean number of allowed authentication attempts.
 
 `chain` - name of chain in firewall table (default: ampere).
 
-#### Example of ampere.cfg:
+#### Example of *ampere.cfg*:
 ```
 pass = 123
 loyalty = 4
@@ -91,7 +92,7 @@ chain = ampere-firewall
 
 AMI also should be configured for accept connections and sent security events
 
-#### Example of asterisk's "manager.conf"
+#### Example of asterisk's *manager.conf*
 ```
 [general]
 enabled = yes
@@ -109,9 +110,10 @@ Then reload asterisk:
 `asterisk -x "manager reload"`
 
 
-## Prerequisites
-Ampere was tested and successfuly used:
-* Asterisk 13.13 (production/dedicated)
+## Stability
+Ampere was tested and successfuly used in production.
+Prerequisites are: 
+* Asterisk 13.13
 * OS Debian 8.6 with kernel 3.16.0-4-amd64
 * gcc version 4.9.2
 

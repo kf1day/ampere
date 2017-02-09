@@ -1,5 +1,4 @@
 #define CONF_STR_SZ 1024
-#define CONF_FILE "/etc/ampere/ampere.cfg"
 
 
 typedef struct {
@@ -42,16 +41,15 @@ int conf_readln( FILE *fd, char *buf ) {
 	return i;
 }
 
-int conf_load() {
-	#define _IS( S ) strcmp( ln+ovc[2], S ) == 0
+int conf_load( const char *path ) {
 	char *ln = malloc( CONF_STR_SZ );
 	int res;
 	FILE *fd;
 	pcre *re_cfg_keyval;
 	
-	fd = fopen( CONF_FILE, "r" );
+	fd = fopen( path, "r" );
 	if ( !fd ) {
-		fprintf( stderr, "ERROR: Cannot open config file: %s\n", CONF_FILE );
+		fprintf( stderr, "ERROR: Cannot open config file: %s\n", path );
 		return -1;
 	}
 	re_cfg_keyval = pcre_compile( "^\\s*([^=\\s]*)\\s*=\\s*([^#;\\s]*).*", 0, &err, &res, NULL );
@@ -60,6 +58,7 @@ int conf_load() {
 		return -2;
 	}
 	
+	#define _IS( S ) strcmp( ln+ovc[2], S ) == 0
 	while ( !feof( fd ) ) {
 		res = conf_readln( fd, ln );
 		if ( res > 0 ) {
