@@ -7,13 +7,17 @@
 #include <sqlite3.h>
 //#include <libiptc/libiptc.h>
 
+#define APP_NAME "ampere"
+#define APP_VERSION "0.1b"
 
 #define STR_SZ 256
 #define MSG_SZ 4*STR_SZ
 #define OVC_SZ 15
 
-// This will be cofigurable
-#define DB_PATH "filter.sqlite"
+// This should be cofigurable via command-line
+#define PATH_CONF "/etc/ampere/ampere.cfg"
+#define PATH_DB "filter.sqlite"
+
 
 
 pcre *re_keyval;
@@ -55,7 +59,6 @@ int db_read_callback( void *z, int argc, char **argv, char **col_name ) {
 	return 0;
 }
 
-
 int process_msg( char *msg, int len ) {
 	#define _K( S ) strcmp( msg+ovc[2], S ) == 0
 	#define _V( S ) strcmp( msg+ovc[4], S ) == 0
@@ -64,15 +67,12 @@ int process_msg( char *msg, int len ) {
 	vmap_t *vx;
 
 	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
-	#ifdef DEBUG_FLAG
-//	printf( ".\n" );
-	#endif
 	while ( res == 3 ) {
 		*(msg+ovc[3]) = 0;
 		*(msg+ovc[5]) = 0;
 		re_offset = ovc[1];
 		#ifdef DEBUG_FLAG
-		printf( " > %s -> %s\n", msg+ovc[2], msg+ovc[4] );
+		printf( "   | %s \"%s\"\n", msg+ovc[2], msg+ovc[4] );
 		#endif
 		if ( _K( "Response" ) ) {
 			if ( _V( "Success" ) ) state = 0x88;
@@ -101,11 +101,8 @@ int process_msg( char *msg, int len ) {
 		}
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	}
-	#ifdef DEBUG_FLAG
-//	printf( ".\n" );
-	#endif
 	
-	res = 0;
+	res = -1;
 	
 	#ifdef DEBUG_FLAG
 	printf( " - State is 0x%X, account: \"%s\", address: \"%s\"\n", state, tmp_account, tmp_address );
@@ -134,26 +131,40 @@ int process_msg( char *msg, int len ) {
 		case 0x23: // InvalidPassword/ChallengeResponseFailed +RemoteAddress +AccountID
 		case 0x43: // ChallengeSent +RemoteAddress +AccountID
 			vx = vmap_get( inet_addr( tmp_address ) );
-			if ( !vx ) {
+			if ( vx ) {
+				if ( ( state & 0x10 ) == 0x10 ) {
+					res = vmap_del( vx );
+					if ( res < 0 ) {
+						fprintf( stderr, "FATAL: VX index out of bounds\n" );
+						return -2;
+					}
+				} else if ( ( state & 0x20 ) == 0x20 ) {
+					vx->penalty++;
+					res = vx->penalty;
+				} else if ( ( state & 0x40 ) == 0x40 ) {
+					vx->penalty += ( vx->penalty % 5 == 4 ) ? 10 : 4;
+					if ( 5 * cfg->loyalty <= vx->penalty ) {
+						#ifdef DEBUG_FLAG
+						printf( " - Penalty is: %d\n", vx->penalty );
+						#endif
+						printf( "Blocking addres %s\n", tmp_address );
+						sprintf( tmp_query, "INSERT OR REPLACE INTO filter(addr, id) VALUES (%ld, \"%s\");", (long int)inet_addr( tmp_address ), tmp_account );
+						res = sqlite3_exec( db, tmp_query, db_write_callback, 0, (char **)&err );
+						if ( res != SQLITE_OK ) {
+							fprintf( stderr, "ERROR (SQL): %s\n", err );
+							return -1;
+						}
+						sprintf( tmp_query, "iptables -A %s -s %s -j REJECT --reject-with icmp-port-unreachable 2>/dev/null", cfg->chain, tmp_address );
+						res = system( tmp_query );
+						if ( res != 0 ) {
+							printf( "WARNING: failed to insert rule via iptables\n" );
+						}
+						vmap_del( vx );
+					}
+				}
+			} else {
 				fprintf( stderr, "FATAL: VMAP exhausted\n" );
 				return -2;
-			}
-			if ( ( state & 0x10 ) == 0x10 ) {
-				res = vmap_del( vx );
-				if ( res < 0 ) {
-					fprintf( stderr, "FATAL: VX index out of bounds\n" );
-					return -2;
-				}
-			} else if ( ( state & 0x20 ) == 0x20 ) {
-				vx->penalty++;
-				res = vx->penalty;
-			} else if ( ( state & 0x40 ) == 0x40 ) {
-				if ( vx->penalty % 5 == 4 ) {
-					vx->penalty += 10;
-				} else {
-					vx->penalty += 4;
-				}
-				res = vx->penalty;
 			}
 			break;
 		case 0x14: // SuccessfulAuth +RemoteAddress:Invalid -AccountID
@@ -167,33 +178,81 @@ int process_msg( char *msg, int len ) {
 			printf( "WARNING: Cannot parse IP address for account \"%s\": %s\n", tmp_account, tmp_address );
 			return 0;
 	}
-	#ifdef DEBUG_FLAG
-	printf( " - Penalty is: %d\n", res );
-	#endif
 
-	if ( 5 * cfg->loyalty <= res ) {
-		printf( "Blocking addres %s\n", tmp_address );
-		sprintf( tmp_query, "INSERT OR REPLACE INTO filter(addr, id) VALUES (%ld, \"%s\");", (long int)inet_addr( tmp_address ), tmp_account );
-		res = sqlite3_exec( db, tmp_query, db_write_callback, 0, (char **)&err );
-		if ( res != SQLITE_OK ) {
-			fprintf( stderr, "ERROR (SQL): %s\n", err );
-			return -1;
-		}
-		sprintf( tmp_query, "iptables -I %s 1 -s %s -j REJECT --reject-with icmp-port-unreachable 2>/dev/null", cfg->chain, tmp_address );
-		res = system( tmp_query );
-		if ( res != 0 ) {
-			printf( "WARNING: failed to insert rule via iptables\n" );
-		}
-		vmap_del( vx );
-	}
 	return 0;
 }
 
-int main( int argc, char **argv ) {
-	int sock, res, len;
+int main( int argc, char *argv[] ) {
+	int sock, res = 0, len = 1;
 	struct sockaddr_in srv;
 	uint8_t buf_offset = 0;
 	char *msg, *buf_start, *buf_end;
+	
+	
+	// init VARS
+	tmp_account = malloc( STR_SZ );
+	tmp_address = malloc( STR_SZ );
+	tmp_query = malloc( STR_SZ );
+	
+	msg = malloc( MSG_SZ * 2 );
+	cfg = malloc( sizeof( conf_t ) );
+	
+	memset( &vmap, 0, sizeof( vmap ) );
+	
+	// parsing args
+	strcpy( msg, PATH_CONF );
+	strcpy( msg + MSG_SZ, PATH_DB );
+	#define _ARG( S ) strcmp( argv[len], S ) == 0
+	while ( len < argc ) {
+		if ( _ARG( "-V" ) ) {
+			printf( "%s/%s\n", APP_NAME, APP_VERSION );
+			return 0;
+		} else if ( _ARG( "-h" ) || _ARG( "--help" ) ) {
+			res = 1;
+			break;
+		} else if ( _ARG( "-c" ) ) {
+			len++;
+			if ( len < argc ) {
+				strcpy( msg, argv[len] );
+				#ifdef DEBUG_FLAG
+				printf( " - Commandline: config path is \"%s\"\n", msg );
+				#endif
+			} else {
+				res = 2;
+				break;
+			}
+		} else if ( _ARG( "-d" ) ) {
+			len++;
+			if ( len < argc ) {
+				strcpy( msg + MSG_SZ, argv[len] );
+				#ifdef DEBUG_FLAG
+				printf( " - Commandline: database path is \"%s\"\n", msg + MSG_SZ );
+				#endif
+			} else {
+				res = 2;
+				break;
+			}
+		} else {
+			res = 2;
+			break;
+		}
+		len++;
+	}
+	if( res == 1 ) {
+		printf( "Usage: %s [OPTIONS]\n", APP_NAME );
+		printf( "Valid options:\n" );
+		printf( "  -V                   Display version number and exit\n" );
+		printf( "  -c <config>          Use alternative configuration file, default is: %s\n", PATH_CONF );
+		printf( "  -d <database>        Use specified database\n" );
+		printf( "  -h, --help           Show this help, then exit\n\n" );
+		return 0;
+	}
+	if( res == 2 ) {
+		printf( "%s: bad arguments\n", APP_NAME );
+		printf( "Try \"%s --help\" for more information\n", argv[0] );
+		return 0;
+	}
+
 	
 	// init REGEXP parser
 	re_keyval = pcre_compile( "(.*): (.*)\r\n", 0, &err, &res, NULL );
@@ -208,27 +267,19 @@ int main( int argc, char **argv ) {
 	}
 	
 	// read config
-	cfg = malloc( sizeof( conf_t ) );
 	cfg->host = 0x0100007F; // 127.0.0.1, octet-reversed
 	cfg->port = 5038;
 	cfg->loyalty = 3;
 	strcpy( cfg->user, "ampere" );
 	strcpy( cfg->pass, "ampere" );
 	strcpy( cfg->chain, "ampere" );
-	res = conf_load();
+	res = conf_load( msg );
 	if ( res < 0 ) {
 		return res;
 	}
 	
-	// init VARS
-	tmp_account = malloc( STR_SZ );
-	tmp_address = malloc( STR_SZ );
-	tmp_query = malloc( STR_SZ );
-	msg = malloc( MSG_SZ * 2 );
-	memset( &vmap, 0, sizeof( vmap ) );
-	
 	// init SQLITE
-	res = sqlite3_open( DB_PATH, &db );
+	res = sqlite3_open( msg + MSG_SZ, &db );
 	if ( res < 0 ) {
 		fprintf( stderr, "FATAL: Could not open database\n" );
 		return -2;
@@ -242,9 +293,10 @@ int main( int argc, char **argv ) {
 	
 	// apply initial fw rules
 	sprintf( tmp_query, "iptables -F %s 2>/dev/null", cfg->chain );
-	system( tmp_query );
-	sprintf( tmp_query, "iptables -A %s -j RETURN 2>/dev/null", cfg->chain );
-	system( tmp_query );
+	res = system( tmp_query );
+	if ( res < 0 ) {
+		printf( "WARNING: Cannot flush chain \"%s\"\n", cfg->chain );
+	}
 	res = sqlite3_exec( db, "SELECT addr FROM filter;", db_read_callback, 0, (char **)&err );
 	if ( res != SQLITE_OK ) {
 		fprintf( stderr, "ERROR (SQL): %s\n", err );
@@ -284,7 +336,7 @@ int main( int argc, char **argv ) {
 	}
 
 	// mainloop
-	printf( "Session opened\n" );
+	printf( "Startup: %s/%s\n", APP_NAME, APP_VERSION );
 	while ( 1 ) {
 		if ( buf_offset < MSG_SZ ) {
 			len = recv( sock, msg + buf_offset, MSG_SZ, 0 );
@@ -326,7 +378,7 @@ int main( int argc, char **argv ) {
 	}
 	break_mainloop:;
 	
-	printf( "Session closed\n" );
+	printf( "Shutdown\n" );
 
 	shutdown( sock, SHUT_RDWR );
 	sqlite3_close( db );
