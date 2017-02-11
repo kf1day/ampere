@@ -53,7 +53,7 @@ WantedBy=multi-user.target
 
 
 ## Configuring
-The main task of Ampere is control firewall rules in specified chain.
+The main task of Ampere is to control firewall rules in specified chain.
 When application starts, chain should exist and jumping into a chain also should be configured.
 
 #### Example of *iptables -S* output:
@@ -67,7 +67,7 @@ When application starts, chain should exist and jumping into a chain also should
 -A INPUT -i eth0 -j DROP
 ```
 
-By default, application reads config from `/etc/ampere/ampere.cfg`. This can be overriden by setting `-c <path/to/file.sqlite>` argument
+By default, application reads config from `/etc/ampere/ampere.cfg`. This can be overriden by setting `-c /path/to/ampere.cfg` argument
 
 The options are:
 
@@ -89,6 +89,8 @@ pass = 123
 loyalty = 4
 chain = ampere-firewall
 ```
+
+Ampere creates SQLite database file named `filter.sqlite` in current working directory. Setting `-d /path/to/db.sqlite` owerrides this behavior.
 
 AMI also should be configured for accept connections and sent security events
 
