@@ -19,11 +19,11 @@ Chain is flushing on application start, then saved rules are applying back again
 
 
 ## Building
-`make` - build unstripped executable
+`make` - build unstripped executable - *fastest build*
 
-`make debug` - build unstripped executable with extra "debug" output (such as parsed config variables, recived messages, etc)
+`make v` - build stripped executable with extra verbosity (such as parsed config variables, recived messages, etc)
 
-`make nice` - build stripped executable with optimization "-O3" flag
+`make nice` - build stripped executable - *smalliest file*
 
 
 ## Installation
@@ -53,7 +53,9 @@ WantedBy=multi-user.target
 
 
 ## Configuring
-The main task of Ampere is control firewall rules in specified chain.
+
+### Firewall
+The main task of Ampere is to control firewall rules in specified chain.
 When application starts, chain should exist and jumping into a chain also should be configured.
 
 #### Example of *iptables -S* output:
@@ -67,7 +69,8 @@ When application starts, chain should exist and jumping into a chain also should
 -A INPUT -i eth0 -j DROP
 ```
 
-By default, application reads config from `/etc/ampere/ampere.cfg`. This can be overriden by setting `-c <path/to/file.sqlite>` argument
+### Config file
+By default, application reads config from `/etc/ampere/ampere.cfg`. This can be overriden by setting `-c /path/to/ampere.cfg` argument
 
 The options are:
 
@@ -90,6 +93,11 @@ loyalty = 4
 chain = ampere-firewall
 ```
 
+### Database
+Ampere creates SQLite database file named `filter.sqlite` in current working directory. Setting `-d /path/to/db.sqlite` overrides this behavior.
+
+
+### Asterisk Management Interface
 AMI also should be configured for accept connections and sent security events
 
 #### Example of asterisk's *manager.conf*
