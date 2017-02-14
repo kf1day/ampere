@@ -32,7 +32,7 @@ int vmap_del( vmap_t *vmap_offset ) {
 		vmap[index].next = vmap_index;
 		vmap_index = index;
 		#ifdef DEBUG_FLAG
-		printf( " - Remove existing VX at index %d\n", index );
+		printf( " - <vmap_del> Del existing HOST at index %d\n", index );
 		#endif
 		return 0;
 	} else {
@@ -46,7 +46,7 @@ vmap_t* vmap_get( in_addr_t addr ) {
 	for ( i = 0; i < VMAP_SZ; i++ ) {
 		if ( vmap[i].addr == addr ) {
 			#ifdef DEBUG_FLAG
-			printf( " - Got existing VX at index %d\n", i );
+			printf( " - <vmap_get> Got existing HOST at index %d\n", i );
 			#endif
 			return &vmap[i];
 		}
@@ -59,7 +59,7 @@ vmap_t* vmap_get( in_addr_t addr ) {
 			vmap_index = vmap[i].next;
 		}
 		#ifdef DEBUG_FLAG
-		printf( " - Initialled new VX at index %d\n", i );
+		printf( " - <vmap_get> Add new HOST at index %d\n", i );
 		#endif
 		vmap[i].addr = addr;
 		vmap[i].penalty = 0;

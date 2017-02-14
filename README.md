@@ -1,36 +1,37 @@
 # Ampere 
-A small tool to protect Asterisk PBX against scanning and bruteforcing.
+Often Asterisk PBX is installed on dedicated server which only provides SIP/IAX services.
+Thus, any suspicious activity should be blocked using local firewall.
+Ampere uses native Asterisk's Management Interface to track such activities.
 
 
 ## Synopsis
-Application subscribes Asterisk's Management Interface (AMI) security events.
+The application subscribes to Asterisk's Management Interface (AMI) security events.
 There is a table of penalties for each host.
-In case of any suspicious activity the penalty raises, increment depends on the status of event.
+In case of any suspicious activity the penalty raises, increment depends on event status.
 Legal event (such as successful auth) removes penalties.
-If penalties are too high, host is blocking in configured chain via `iptables` syscall.
+If the penalties are too high, host blocked in configured chain via `iptables` syscall.
 Each violator is stored in SQLite database.
-Chain is flushing on application start, then saved rules are applying back again.
+The chain is flushed at application starts, and previously saved rules applies back again.
 
 
 ## Dependencies:
-- libpcre3
-- libsqlite3
-- iptables
+* Asterisk 12 or above
+* libpcre3
+* libsqlite3
+* iptables
 
 
 ## Building
-`make` - build unstripped executable - *fastest build*
+`make` - build stripped executable
 
-`make v` - build stripped executable with extra verbosity (such as parsed config variables, recived messages, etc)
-
-`make nice` - build stripped executable - *smalliest file*
+`make dev` - build unstripped executable with extra verbosity (such as parsed config variables, recived messages, etc)
 
 
 ## Installation
 * Put `ampere.cfg` into `/etc/ampere/`
 * Put executable anywhere you want, e.g. `/usr/lib/ampere/`
 
-The tool is not acting like a natural UNIX daemon (for now) and should be started via SystemD / SysV init script.
+Ampere is not acting like a natural UNIX daemon (for now) and should be started via SystemD / SysV init script.
 
 #### Example of *ampere.service* for systemd:
 ```
@@ -119,9 +120,10 @@ Then reload asterisk:
 
 
 ## Stability
-Ampere was tested and successfuly used in production.
-Prerequisites are: 
-* Asterisk 13.13
-* OS Debian 8.6 with kernel 3.16.0-4-amd64
-* gcc version 4.9.2
+Ampere has been tested and successfuly used in production.
+Prerequisites are:
+* Asterisk 12.8.2 and 13.13.1
+* OS Debian 8 with kernel 3.16.0-4-amd64
+* GCC version 4.9.2
+
 
