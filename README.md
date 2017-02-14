@@ -19,11 +19,9 @@ Chain is flushing on application start, then saved rules are applying back again
 
 
 ## Building
-`make` - build unstripped executable - *fastest build*
+`make` - build stripped executable - *fastest build*
 
-`make v` - build stripped executable with extra verbosity (such as parsed config variables, recived messages, etc)
-
-`make nice` - build stripped executable - *smalliest file*
+`make dev` - build unstripped executable with extra verbosity (such as parsed config variables, recived messages, etc)
 
 
 ## Installation
