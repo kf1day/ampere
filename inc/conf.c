@@ -49,8 +49,8 @@ int conf_load( const char *path ) {
 	
 	fd = fopen( path, "r" );
 	if ( !fd ) {
-		fprintf( stderr, "ERROR: Cannot open config file: %s\n", path );
-		return -1;
+		printf( "WARNING: Cannot open config file: \"%s\". Continue using default values\n", path );
+		return 0;
 	}
 	re_cfg_keyval = pcre_compile( "^\\s*([^=\\s]*)\\s*=\\s*([^#;\\s]*).*", 0, &err, &res, NULL );
 	if ( !re_cfg_keyval ) {
@@ -100,5 +100,6 @@ int conf_load( const char *path ) {
 			}
 		}
 	}
+	fclose( fd );
 	return 0;
 }

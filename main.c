@@ -8,7 +8,7 @@
 //#include <libiptc/libiptc.h>
 
 #define APP_NAME "ampere"
-#define APP_VERSION "0.1c"
+#define APP_VERSION "0.1d"
 
 #define STR_SZ 256
 #define MSG_SZ 1024
@@ -130,7 +130,7 @@ int process_msg( char *msg, int len ) {
 	}
 	
 	if ( !( state & 0x02 ) ) {
-		printf( "WARNING: Incomplete message - \"AccountID\" not specified\n" );
+		printf( "WARNING: Incomplete message - \"AccountID\" is not specified\n" );
 	}
 	
 	vx = vmap_get( inet_addr( tmp_address ) );
