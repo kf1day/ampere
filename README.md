@@ -1,13 +1,13 @@
 # Ampere 
-Often Asterisk PBX is installed on dedicated server which only provides SIP/IAX services.
-Thus, any suspicious activity should be blocked using local firewall.
+Often Asterisk PBX is installed on a dedicated server which only provides SIP/IAX services.
+Thus, any suspicious activity should be blocked using the local firewall.
 Ampere uses native Asterisk's Management Interface to track such activities.
 
 
 ## Synopsis
 The application subscribes to Asterisk's Management Interface (AMI) security events.
 There is a table of penalties for each host.
-In case of any suspicious activity the penalty raises, increment depends on event status.
+In a case of any suspicious activity, the penalty raises, increment depends on event status.
 Legal event (such as successful auth) removes penalties.
 If the penalties are too high, host blocked in configured chain via `iptables` syscall.
 Each violator is stored in SQLite database.
