@@ -30,6 +30,7 @@ char *tmp_account, *tmp_address, *tmp_query;
 const char *err;
 
 sqlite3 *db;
+FILE *fd = NULL;
 
 
 #include "inc/vmap.c"
@@ -208,7 +209,6 @@ int main( int argc, char *argv[] ) {
 	struct sockaddr_in srv;
 	uint8_t buf_offset = 0;
 	char *msg = malloc( MSG_SZ * 2 ), *buf_start, *buf_end;
-//	FILE *fd = NULL;
 	
 	// parsing args
 	strcpy( msg, DEF_CONF_PATH );
@@ -228,6 +228,17 @@ int main( int argc, char *argv[] ) {
 			len++;
 			if ( len < argc ) {
 				strcpy( msg, argv[len] );
+				#ifdef DEBUG_FLAG
+				printf( " - <main> Config path is set via commandline: \"%s\"\n", msg );
+				#endif
+			} else {
+				res = 2;
+				break;
+			}
+		} else if ( _ARG( "-o" ) || _ARG( "-O" ) ) {
+			len++;
+			if ( len < argc ) {
+				fd = fopen( argv[len], "a" );
 				#ifdef DEBUG_FLAG
 				printf( " - <main> Config path is set via commandline: \"%s\"\n", msg );
 				#endif
@@ -358,6 +369,13 @@ int main( int argc, char *argv[] ) {
 	
 	free( cfg_tmp );
 	cfg_tmp = NULL;
+	
+	if ( fd ) {
+		fclose( stderr );
+		fclose( stdout );
+		stdout = fd;
+		stderr = fd;
+	}
 
 	// mainloop
 	printf( "Startup: %s/%s\n", APP_NAME, APP_VERSION );
