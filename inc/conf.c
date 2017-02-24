@@ -10,7 +10,7 @@ typedef struct {
 typedef struct {
 	in_addr_t host;
 	uint16_t port;
-	char user[STR_SZ], pass[STR_SZ], base[PATH_SZ];
+	char user[STR_SZ], pass[STR_SZ], lib[PATH_SZ];
 
 } conf_tmp_t;
 
@@ -54,7 +54,7 @@ int conf_load( const char *path ) {
 	int res;
 	FILE *fd;
 	pcre *re_cfg_keyval;
-	
+
 	fd = fopen( path, "r" );
 	if ( !fd ) {
 		printf( "WARNING: Cannot open config file: \"%s\" - using default values\n", path );
@@ -65,7 +65,7 @@ int conf_load( const char *path ) {
 		fprintf( stderr, "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
 		return -2;
 	}
-	
+
 	#define _IS( S ) strcmp( ln+ovc[2], S ) == 0
 	while ( !feof( fd ) ) {
 		res = conf_readln( fd, ln );
@@ -99,10 +99,10 @@ int conf_load( const char *path ) {
 					#ifdef DEBUG_FLAG
 					printf( " - <conf_load> pass is %s\n", cfg_tmp->pass );
 					#endif
-				} else if ( _IS( "base" ) ) {
-					strcpy( cfg_tmp->base, ln+ovc[4] );
+				} else if ( _IS( "lib" ) ) {
+					strcpy( cfg_tmp->lib, ln+ovc[4] );
 					#ifdef DEBUG_FLAG
-					printf( " - <conf_load> base is %s\n", cfg_tmp->base );
+					printf( " - <conf_load> lib is %s\n", cfg_tmp->lib );
 					#endif
 				} else if ( _IS( "net" ) ) {
 					res = vmap_atoi( ln+ovc[4], &cfg->net );

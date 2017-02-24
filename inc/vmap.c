@@ -26,7 +26,7 @@ int vmap_atoi( char *addr_str, uint32_t *addr );
  *******************/
 int vmap_del( vmap_t *vmap_offset ) {
 	int index;
-	
+
 	index = vmap_offset - vmap;
 	if ( 0 <= index && index < VMAP_SZ ) {
 		vmap[index].addr = 0;
@@ -43,7 +43,7 @@ int vmap_del( vmap_t *vmap_offset ) {
 
 vmap_t* vmap_get( uint32_t addr ) {
 	uint16_t i;
-	
+
 	for ( i = 0; i < VMAP_SZ; i++ ) {
 		if ( vmap[i].addr == addr ) {
 			#ifdef DEBUG_FLAG
@@ -69,12 +69,12 @@ vmap_t* vmap_get( uint32_t addr ) {
 	} else {
 		return NULL;
 	}
-	
+
 }
 
 int vmap_itos( uint32_t addr, char *addr_str ) {
 	uint8_t o[4];
-	
+
 	memcpy( &o, &addr, 4 );
 	sprintf( addr_str, "%hhu.%hhu.%hhu.%hhu", o[3], o[2], o[1], o[0] );
 	return 0;
@@ -83,7 +83,7 @@ int vmap_itos( uint32_t addr, char *addr_str ) {
 int vmap_atoi( char *addr_str, uint32_t *addr ) {
 	uint8_t o[4];
 	int res;
-	
+
 	res = sscanf( addr_str, "%hhu.%hhu.%hhu.%hhu", &o[3], &o[2], &o[1], &o[0] );
 	if ( res < 0 ) {
 		return -1;

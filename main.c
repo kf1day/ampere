@@ -15,8 +15,8 @@
 #define OVC_SZ 15
 #define PATH_SZ 2048
 
-#define DEF_CONF_PATH "/etc/ampere/ampere.cfg"
-#define DEF_DB_PATH "/var/lib/ampere/db.sqlite"
+#define DEF_CFG_PATH "/etc/ampere/ampere.cfg"
+#define DEF_LIB_PATH "/var/lib/ampere/db.sqlite"
 #define DEF_AMI_USER "ampere"
 #define DEF_AMI_PASS "ampere"
 #define DEF_FW_CHAIN "ampere"
@@ -43,7 +43,7 @@ int db_write_callback( void *z, int argc, char **argv, char **col_name ) {
 int db_read_callback( void *z, int argc, char **argv, char **col_name ) {
 	int i, res;
 	in_addr_t ip;
-	
+
 	for( i = 0; i < argc; i++ ) {
 		ip = atol( argv[i] );
 		if ( ip > 0 ) {
@@ -55,7 +55,7 @@ int db_read_callback( void *z, int argc, char **argv, char **col_name ) {
 			res = system( tmp_query );
 			if ( res != 0 ) {
 				printf( "WARNING: failed to insert rule via iptables\n" );
-			}			
+			}
 		} else {
 			printf( "WARNING: Cannot convert IP from database record: %s\n", argv[i] ? argv[i] : "NULL" );
 		}
@@ -111,11 +111,11 @@ int process_msg( char *msg, int len ) {
 		}
 		res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	}
-		
+
 	#ifdef DEBUG_FLAG
 	printf( " - <process_msg> State is 0x%X, account: \"%s\", address: \"%s\"\n", state, tmp_account, tmp_address );
 	#endif
-	
+
 	if ( !( state & 0xF0 ) ) {
 		#ifdef DEBUG_FLAG
 		printf( " - <process_msg> Message does not met required event type\n" );
@@ -128,35 +128,35 @@ int process_msg( char *msg, int len ) {
 		#endif
 		return 0;
 	}
-	
+
 	if ( !( state & 0x04 ) ) {
 		printf( "WARNING: Incomplete message - \"RemoteAddress\" is not specified or unknown, skipping\n" );
 		return 0;
 	}
-	
+
 	if ( !( state & 0x02 ) ) {
 		printf( "WARNING: Incomplete message - \"AccountID\" is not specified\n" );
 	}
-	
+
 	res = vmap_atoi( tmp_address, &addr );
 	if ( res < 0 ) {
 		printf( "WARNING: Cannot translate address: %s\n", tmp_address );
 		return 0;
 	}
-	
+
 	if ( addr >> cfg->mask == cfg->net >> cfg->mask ) {
 		#ifdef DEBUG_FLAG
 		printf( " - <process_msg> Skipping internal address\n" );
 		#endif
 		return 0;
 	}
-	
+
 	vx = vmap_get( addr ); // vmap_get generates message itself
 	if ( !vx ) {
 		fprintf( stderr, "FATAL: VMAP exhausted\n" );
 		return -2;
 	}
-	
+
 	switch ( state ) {
 		case 0x8E:
 			#ifdef DEBUG_FLAG
@@ -164,19 +164,19 @@ int process_msg( char *msg, int len ) {
 			#endif
 			vmap_del( vx );
 			return 0;
-		
+
 		case 0x4E:
 			vx->penalty++;
 			break;
-		
+
 		case 0x2E:
 			vx->penalty += ( vx->penalty % 5 == 4 ) ? 10 : 4;
 			break;
-		
+
 		case 0x1E:
 			vx->penalty += ( vx->penalty % 5 == 4 ) ? 5 : 4;
 			break;
-		
+
 		default:
 			printf( "WARNING: unexpected state\n" );
 			return 0;
@@ -209,9 +209,9 @@ int main( int argc, char *argv[] ) {
 	struct sockaddr_in srv;
 	uint8_t buf_offset = 0;
 	char *msg = malloc( MSG_SZ * 2 ), *buf_start, *buf_end;
-	
+
 	// parsing args
-	strcpy( msg, DEF_CONF_PATH );
+	strcpy( msg, DEF_CFG_PATH );
 	#define _ARG( S ) strcmp( argv[len], S ) == 0
 	while ( len < argc ) {
 		if ( _ARG( "-V" ) ) {
@@ -256,7 +256,8 @@ int main( int argc, char *argv[] ) {
 		printf( "Usage: %s [OPTIONS]\n", APP_NAME );
 		printf( "Valid options:\n" );
 		printf( "  -V                   Display version number and exit\n" );
-		printf( "  -c <config>          Use alternative configuration file, default is: %s\n", DEF_CONF_PATH );
+		printf( "  -c <config>          Use alternative configuration file, default is: %s\n", DEF_CFG_PATH );
+		printf( "  -o, -O               Set output to a file" );
 		printf( "  -h, --help           Show this help, then exit\n\n" );
 		return 0;
 	}
@@ -265,7 +266,7 @@ int main( int argc, char *argv[] ) {
 		fprintf( stderr, "Try \"%s --help\" for more information\n", argv[0] );
 		return -1;
 	}
-	
+
 	// init REGEXP parser
 	re_keyval = pcre_compile( "(.*?): (.*)\r\n", 0, &err, &res, NULL );
 	if ( !re_keyval ) {
@@ -277,41 +278,41 @@ int main( int argc, char *argv[] ) {
 		fprintf( stderr, "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
 		return -2;
 	}
-	
+
 	// init VARS
 	tmp_account = malloc( STR_SZ );
 	tmp_address = malloc( STR_SZ );
 	tmp_query = malloc( STR_SZ );
-	
+
 	cfg = malloc( sizeof( conf_t ) );
 	cfg_tmp = malloc( sizeof( conf_tmp_t ) );
-	
+
 	memset( &vmap, 0, sizeof( vmap ) );
-	
+
 	// read config
 	cfg_tmp->host = 0x0100007F; // 127.0.0.1, octet-reversed
 	cfg_tmp->port = 5038;
 	strcpy( cfg_tmp->user, DEF_AMI_USER );
 	strcpy( cfg_tmp->pass, DEF_AMI_PASS );
-	strcpy( cfg_tmp->base, DEF_DB_PATH );
-	
+	strcpy( cfg_tmp->lib, DEF_LIB_PATH );
+
 	cfg->net = 0;
 	cfg->mask = 0;
 	cfg->loyalty = DEF_LOYALTY;
 	strcpy( cfg->chain, DEF_FW_CHAIN );
-	
-	
+
+
 	#ifdef DEBUG_FLAG
 	printf( " - <main> Read config from \"%s\"\n", msg );
 	#endif
-	
+
 	res = conf_load( msg ); // conf_load generates message itself
 	if ( res < -1 ) {
 		return res;
 	}
-	
+
 	// init SQLITE
-	res = sqlite3_open( cfg_tmp->base, &db );
+	res = sqlite3_open( cfg_tmp->lib, &db );
 	if ( res < 0 ) {
 		fprintf( stderr, "FATAL: Could not open database\n" );
 		return -2;
@@ -322,7 +323,7 @@ int main( int argc, char *argv[] ) {
 		sqlite3_close( db );
 		return -1;
 	}
-	
+
 	// apply initial fw rules
 	sprintf( tmp_query, "iptables -F %s 2>/dev/null", cfg->chain );
 	res = system( tmp_query );
@@ -335,7 +336,7 @@ int main( int argc, char *argv[] ) {
 		sqlite3_close( db );
 		return -1;
 	}
-	
+
 	// create socket
 	sock = socket( AF_INET, SOCK_STREAM, 0 );
 	if ( sock < 0 ) {
@@ -346,7 +347,7 @@ int main( int argc, char *argv[] ) {
 	srv.sin_addr.s_addr = cfg_tmp->host;
 	srv.sin_family = AF_INET;
 	srv.sin_port = htons( cfg_tmp->port );
-	
+
 	// connect to AMI
 	res = connect( sock, ( struct sockaddr* ) &srv, sizeof( srv ) );
 	if ( res < 0 ) {
@@ -356,7 +357,7 @@ int main( int argc, char *argv[] ) {
 		sqlite3_close( db );
 		return -1;
 	}
-	
+
 	// send AUTH message
 	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\n\r\n", cfg_tmp->user, cfg_tmp->pass );
 	res = send( sock, msg, strlen( msg ), 0 );
@@ -366,16 +367,17 @@ int main( int argc, char *argv[] ) {
 		sqlite3_close( db );
 		return -2;
 	}
-	
+
 	free( cfg_tmp );
 	cfg_tmp = NULL;
-	
+
 	if ( fd ) {
 		fclose( stderr );
 		fclose( stdout );
 		stdout = fd;
 		stderr = fd;
 	}
+	setbuf( stdout, NULL );
 
 	// mainloop
 	printf( "Startup: %s/%s\n", APP_NAME, APP_VERSION );
@@ -405,7 +407,7 @@ int main( int argc, char *argv[] ) {
 					buf_start = buf_end + 2;
 					buf_end = strstr( buf_start, "\r\n\r\n" );
 				}
-				
+
 				if ( msg + buf_offset + len == buf_start ) { // MSGTERM found at the end of message, reset buf_offset
 					buf_offset = 0;
 				} else { // MSGTERM not found at the end of message, move remain buffer to 0-position
@@ -419,7 +421,7 @@ int main( int argc, char *argv[] ) {
 		}
 	}
 	break_mainloop:;
-	
+
 	printf( "Shutdown\n" );
 
 	shutdown( sock, SHUT_RDWR );
