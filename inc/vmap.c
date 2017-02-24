@@ -2,8 +2,8 @@
 
 
 typedef struct {
-	in_addr_t addr;
-	int16_t penalty;
+	uint32_t addr;
+	uint8_t penalty;
 	uint16_t next;
 } vmap_t;
 
@@ -16,8 +16,9 @@ vmap_t vmap[VMAP_SZ];
  *    INTERFACE    *
  *******************/
 int vmap_del( vmap_t *vmap_offset );
-vmap_t* vmap_get( in_addr_t addr );
-void vmap_itos( in_addr_t addr, char *addr_str );
+vmap_t* vmap_get( uint32_t addr );
+int vmap_itos( uint32_t addr, char *addr_str );
+int vmap_atoi( char *addr_str, uint32_t *addr );
 
 
 /*******************
@@ -25,7 +26,7 @@ void vmap_itos( in_addr_t addr, char *addr_str );
  *******************/
 int vmap_del( vmap_t *vmap_offset ) {
 	int index;
-	
+
 	index = vmap_offset - vmap;
 	if ( 0 <= index && index < VMAP_SZ ) {
 		vmap[index].addr = 0;
@@ -40,9 +41,9 @@ int vmap_del( vmap_t *vmap_offset ) {
 	}
 }
 
-vmap_t* vmap_get( in_addr_t addr ) {
+vmap_t* vmap_get( uint32_t addr ) {
 	uint16_t i;
-		
+
 	for ( i = 0; i < VMAP_SZ; i++ ) {
 		if ( vmap[i].addr == addr ) {
 			#ifdef DEBUG_FLAG
@@ -68,15 +69,25 @@ vmap_t* vmap_get( in_addr_t addr ) {
 	} else {
 		return NULL;
 	}
-	
+
 }
 
-void vmap_itos( in_addr_t addr, char *addr_str ) {
+int vmap_itos( uint32_t addr, char *addr_str ) {
 	uint8_t o[4];
-	
-	o[0] = addr / 0x1000000;
-	o[1] = addr / 0x10000 % 0x100;
-	o[2] = addr / 0x100 % 0x100;
-	o[3] = addr % 0x100;
-	sprintf( addr_str, "%d.%d.%d.%d", o[3], o[2], o[1], o[0] );
+
+	memcpy( &o, &addr, 4 );
+	sprintf( addr_str, "%hhu.%hhu.%hhu.%hhu", o[3], o[2], o[1], o[0] );
+	return 0;
+}
+
+int vmap_atoi( char *addr_str, uint32_t *addr ) {
+	uint8_t o[4];
+	int res;
+
+	res = sscanf( addr_str, "%hhu.%hhu.%hhu.%hhu", &o[3], &o[2], &o[1], &o[0] );
+	if ( res < 0 ) {
+		return -1;
+	}
+	memcpy( addr, &o, 4 );
+	return 0;
 }

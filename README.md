@@ -1,13 +1,13 @@
 # Ampere 
-Often Asterisk PBX is installed on dedicated server which only provides SIP/IAX services.
-Thus, any suspicious activity should be blocked using local firewall.
+Often Asterisk PBX is installed on a dedicated server which only provides SIP/IAX services.
+Thus, any suspicious activity should be blocked using the local firewall.
 Ampere uses native Asterisk's Management Interface to track such activities.
 
 
 ## Synopsis
 The application subscribes to Asterisk's Management Interface (AMI) security events.
 There is a table of penalties for each host.
-In case of any suspicious activity the penalty raises, increment depends on event status.
+In a case of any suspicious activity, the penalty raises, increment depends on event status.
 Legal event (such as successful auth) removes penalties.
 If the penalties are too high, host blocked in configured chain via `iptables` syscall.
 Each violator is stored in SQLite database.
@@ -46,7 +46,7 @@ TimeoutSec=120
 
 SyslogIdentifier=ampere
 
-ExecStart=/usr/lib/ampere/ampere -d /var/lib/ampere/filter.sqlite
+ExecStart=/usr/lib/ampere/ampere -o /var/log/ampere.log
 
 [Install]
 WantedBy=multi-user.target
@@ -87,15 +87,24 @@ The options are:
 
 `chain` - name of chain in firewall table (default: ampere).
 
+`lib` - path to SQLite database (default: /var/lib/ampere/db.sqlite).
+
+`net` - network address of trusted network (default: 0.0.0.0 - consider any host is untrusted).
+
+`mask` - mask of trusted network, value is: 0-32 (default: 0)
+
+
 #### Example of *ampere.cfg*:
 ```
 pass = 123
 loyalty = 4
 chain = ampere-firewall
+net = 192.168.0.0
+mask = 22
 ```
 
 ### Database
-Ampere creates SQLite database file named `filter.sqlite` in current working directory. Setting `-d /path/to/db.sqlite` overrides this behavior.
+Ampere creates SQLite database file at configured path. Directory should exist.
 
 
 ### Asterisk Management Interface
