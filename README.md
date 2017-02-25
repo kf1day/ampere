@@ -10,14 +10,14 @@ There is a table of penalties for each host.
 In a case of any suspicious activity, the penalty raises, increment depends on event status.
 Legal event (such as successful auth) removes penalties.
 If the penalties are too high, host blocked in configured chain via `iptables` syscall.
-Each violator is stored in SQLite database.
+Each violator is stored in internal database.
 The chain is flushed at application starts, and previously saved rules applies back again.
 
 
 ## Dependencies:
 * Asterisk 12 or above
 * libpcre3
-* libsqlite3
+* libdb
 * iptables
 
 
@@ -87,7 +87,7 @@ The options are:
 
 `chain` - name of chain in firewall table (default: ampere).
 
-`lib` - path to SQLite database (default: /var/lib/ampere/db.sqlite).
+`lib` - path to internal database (default: /var/lib/ampere/filter.db).
 
 `net` - network address of trusted network (default: 0.0.0.0 - consider any host is untrusted).
 
@@ -104,7 +104,7 @@ mask = 22
 ```
 
 ### Database
-Ampere creates SQLite database file at configured path. Directory should exist.
+Ampere creates BerkleyDB internal database file at configured path. Directory should exist.
 
 
 ### Asterisk Management Interface
@@ -133,6 +133,8 @@ Ampere has been tested and successfuly used in production.
 Prerequisites are:
 * Asterisk 12.8.2 and 13.13.1
 * OS Debian 8 with kernel 3.16.0-4-amd64
+* BerkleyDB libraries v5.3
+* iptables v1.4.21
 * GCC version 4.9.2
 
 

@@ -4,7 +4,6 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pcre.h>
-//#include <sqlite3.h>
 #include "../inc/vmap.h"
 #include "../inc/dba.h"
 
@@ -192,16 +191,18 @@ int conf_load( const char *path ) {
 }
 
 void dbp_get_callback( uint32_t addr ) {
+	int res;
+	
 	key_to_str( addr, tmp_address );
 	#ifdef DEBUG_FLAG
 	printf( " - <db_read_callback> Blocking %s during startup\n", tmp_address );
 	#endif
 	sprintf( tmp_query, "iptables -A %s -s %s -j REJECT --reject-with icmp-port-unreachable 2>/dev/null", cfg->chain, tmp_address );
-	printf( "%s\n", tmp_query );
-/*	res = system( tmp_query );
+//	printf( "%s\n", tmp_query );
+	res = system( tmp_query );
 	if ( res != 0 ) {
 		printf( "WARNING: failed to insert rule via iptables\n" );
-	}*/
+	}
 }
 
 int process_msg( char *msg, int len ) {

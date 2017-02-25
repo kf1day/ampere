@@ -12,8 +12,6 @@ int dba_init( DB **dbp, const char *path ) {
 		return -1;
 	}
 
-//	(*dbp)->set_flags( *dbp, DB_RECNUM );
-
 	res = (*dbp)->open( *dbp, NULL, path, NULL, DB_BTREE, DB_CREATE, 0 );
 	if ( res < 0 ) {
 		return -2;
@@ -32,7 +30,7 @@ void dba_free( DB **dbp ) {
 	}
 }
 
-int dba_get( DB *dbp, void (*callback)( uint32_t key ) ) {
+int dba_get( DB *dbp, void ( *callback )( uint32_t key ) ) {
 	int res;
 	DBC *pos;
 	DBT *key, *val;
@@ -51,7 +49,6 @@ int dba_get( DB *dbp, void (*callback)( uint32_t key ) ) {
 
 	while( pos->get( pos, key, val, DB_NEXT ) == 0 ) {
 		callback( *(uint32_t*)key->data );
-//		callback( 0x00FAC742 );
 	}
 	pos->close( pos );
 	return 0;
