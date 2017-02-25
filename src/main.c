@@ -5,10 +5,11 @@
 #include <arpa/inet.h>
 #include <pcre.h>
 #include <sqlite3.h>
-//#include <libiptc/libiptc.h>
+#include "../inc/vmap.h"
+
 
 #define APP_NAME "ampere"
-#define APP_VERSION "0.1d"
+#define APP_VERSION "0.2.1"
 
 #define STR_SZ 256
 #define MSG_SZ 1024
@@ -23,6 +24,19 @@
 #define DEF_LOYALTY 3
 
 
+typedef struct {
+	char chain[STR_SZ];
+	uint8_t loyalty, mask;
+	uint32_t net;
+} conf_t;
+
+typedef struct {
+	in_addr_t host;
+	uint16_t port;
+	char user[STR_SZ], pass[STR_SZ], lib[PATH_SZ];
+} conf_tmp_t;
+
+
 pcre *re_keyval;
 pcre *re_ipv4;
 int ovc[OVC_SZ];
@@ -32,9 +46,148 @@ const char *err;
 sqlite3 *db;
 FILE *fd = NULL;
 
+conf_t *cfg;
+conf_tmp_t *cfg_tmp;
 
-#include "inc/vmap.c"
-#include "inc/conf.c"
+vmap_t *vmap;
+
+
+int key_to_str( uint32_t addr, char *addr_str ) {
+	uint8_t o[4];
+
+	memcpy( &o, &addr, 4 );
+	sprintf( addr_str, "%hhu.%hhu.%hhu.%hhu", o[3], o[2], o[1], o[0] );
+	return 0;
+}
+
+int str_to_key( char *addr_str, uint32_t *addr ) {
+	uint8_t o[4];
+	int res;
+
+	res = sscanf( addr_str, "%hhu.%hhu.%hhu.%hhu", &o[3], &o[2], &o[1], &o[0] );
+	if ( res < 0 ) {
+		return -1;
+	}
+	memcpy( addr, &o, 4 );
+	return 0;
+}
+
+int conf_readln( FILE *fd, char *buf ) {
+	char c;
+	int i = 0;
+
+	*buf = 0;
+	while ( !feof( fd ) ) {
+		c = fgetc( fd );
+		if ( c < 0 || c == 10 || c == 13 || i + 1 == MSG_SZ ) {
+			*(buf+i) = 0;
+			return i;
+		} else {
+			*(buf+i) = c;
+			i++;
+		}
+	}
+	*(buf+i) = 0;
+	return i;
+}
+
+int conf_load( const char *path ) {
+	char *ln = malloc( MSG_SZ );
+	int res;
+	FILE *fd;
+	pcre *re_cfg_keyval;
+
+	fd = fopen( path, "r" );
+	if ( !fd ) {
+		printf( "WARNING: Cannot open config file: \"%s\" - using default values\n", path );
+		return -1;
+	}
+	re_cfg_keyval = pcre_compile( "^\\s*(.*?)\\s*=\\s*(.*)[\\s;#]*.*$", 0, &err, &res, NULL );
+	if ( !re_cfg_keyval ) {
+		fprintf( stderr, "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
+		return -2;
+	}
+
+	#define _IS( S ) strcmp( ln+ovc[2], S ) == 0
+	while ( !feof( fd ) ) {
+		res = conf_readln( fd, ln );
+		if ( res > 0 ) {
+			res = pcre_exec( re_cfg_keyval, NULL, ln, res, 0, 0, ovc, OVC_SZ );
+			if ( res == 3 ) {
+				*(ln+ovc[3]) = 0;
+				*(ln+ovc[5]) = 0;
+				if ( _IS( "host" ) ) {
+					cfg_tmp->host = inet_addr( ln+ovc[4] );
+					#ifdef DEBUG_FLAG
+					printf( " - <conf_load> host is %s\n", ln+ovc[4] );
+					#endif
+				} else if ( _IS( "port" ) ) {
+					res = atoi( ln+ovc[4] );
+					if ( res > 0 ) {
+						cfg_tmp->port = res;
+						#ifdef DEBUG_FLAG
+						printf( " - <conf_load> port is %d\n", cfg_tmp->port );
+						#endif
+					} else {
+						printf( "WARNING: Cannot convert \"port\" value to an integer" );
+					}
+				} else if ( _IS( "user" ) ) {
+					strcpy( cfg_tmp->user, ln+ovc[4] );
+					#ifdef DEBUG_FLAG
+					printf( " - <conf_load> user is %s\n", cfg_tmp->user );
+					#endif
+				} else if ( _IS( "pass" ) ) {
+					strcpy( cfg_tmp->pass, ln+ovc[4] );
+					#ifdef DEBUG_FLAG
+					printf( " - <conf_load> pass is %s\n", cfg_tmp->pass );
+					#endif
+				} else if ( _IS( "lib" ) ) {
+					strcpy( cfg_tmp->lib, ln+ovc[4] );
+					#ifdef DEBUG_FLAG
+					printf( " - <conf_load> lib is %s\n", cfg_tmp->lib );
+					#endif
+				} else if ( _IS( "net" ) ) {
+					res = str_to_key( ln+ovc[4], &cfg->net );
+					if ( res < 0 ) {
+						cfg->net = 0;
+						printf( "WARNING: Cannot convert \"net\" value to an address" );
+					#ifdef DEBUG_FLAG
+					} else {
+						printf( " - <conf_load> net is %s\n", ln+ovc[4] );
+					#endif
+					}
+				} else if ( _IS( "mask" ) ) {
+					res = atoi( ln+ovc[4] );
+					if ( res > 0 && res <= 32 ) {
+						cfg->mask = 32 - res;
+						#ifdef DEBUG_FLAG
+						printf( " - <conf_load> mask is %d\n", res );
+						#endif
+					} else {
+						printf( "WARNING: Cannot convert \"mask\" value to an integer" );
+					}
+				} else if ( _IS( "loyalty" ) ) {
+					res = atoi( ln+ovc[4] );
+					if ( res > 0 ) {
+						cfg->loyalty = res;
+						#ifdef DEBUG_FLAG
+						printf( " - <conf_load> loyalty is %d\n", cfg->loyalty );
+						#endif
+					} else {
+						printf( "WARNING: Cannot convert \"loyalty\" value to an integer" );
+					}
+				} else if ( _IS( "chain" ) ) {
+					strcpy( cfg->chain, ln+ovc[4] );
+					#ifdef DEBUG_FLAG
+					printf( " - <conf_load> chain is %s\n", cfg->chain );
+					#endif
+				}
+			}
+		}
+	}
+	fclose( fd );
+	return 0;
+}
 
 int db_write_callback( void *z, int argc, char **argv, char **col_name ) {
 	return 0;
@@ -42,12 +195,12 @@ int db_write_callback( void *z, int argc, char **argv, char **col_name ) {
 
 int db_read_callback( void *z, int argc, char **argv, char **col_name ) {
 	int i, res;
-	in_addr_t ip;
+	uint32_t addr;
 
 	for( i = 0; i < argc; i++ ) {
-		ip = atol( argv[i] );
-		if ( ip > 0 ) {
-			vmap_itos( ip, tmp_address );
+		addr = atol( argv[i] );
+		if ( addr > 0 ) {
+			key_to_str( addr, tmp_address );
 			#ifdef DEBUG_FLAG
 			printf( " - <db_read_callback> Blocking %s during startup\n", tmp_address );
 			#endif
@@ -67,7 +220,6 @@ int process_msg( char *msg, int len ) {
 	int res, re_offset = 0;
 	uint8_t state = 0;
 	uint32_t addr;
-	vmap_t *vx = NULL;
 
 	res = pcre_exec( re_keyval, NULL, msg, len, re_offset, 0, ovc, OVC_SZ );
 	#define _K( S ) strcmp( msg+ovc[2], S ) == 0
@@ -138,7 +290,7 @@ int process_msg( char *msg, int len ) {
 		printf( "WARNING: Incomplete message - \"AccountID\" is not specified\n" );
 	}
 
-	res = vmap_atoi( tmp_address, &addr );
+	res = str_to_key( tmp_address, &addr );
 	if ( res < 0 ) {
 		printf( "WARNING: Cannot translate address: %s\n", tmp_address );
 		return 0;
@@ -151,8 +303,8 @@ int process_msg( char *msg, int len ) {
 		return 0;
 	}
 
-	vx = vmap_get( addr ); // vmap_get generates message itself
-	if ( !vx ) {
+	re_offset = vmap_get( vmap, addr ); // vmap_get generates message itself
+	if ( re_offset < 0 ) {
 		fprintf( stderr, "FATAL: VMAP exhausted\n" );
 		return -2;
 	}
@@ -162,19 +314,19 @@ int process_msg( char *msg, int len ) {
 			#ifdef DEBUG_FLAG
 			printf( " - <process_msg> Account \"%s\" successfuly logged in from address: \"%s\"\n", tmp_account, tmp_address );
 			#endif
-			vmap_del( vx );
+			vmap_del( vmap, re_offset );
 			return 0;
 
 		case 0x4E:
-			vx->penalty++;
+			vmap->item[re_offset].penalty++;
 			break;
 
 		case 0x2E:
-			vx->penalty += ( vx->penalty % 5 == 4 ) ? 10 : 4;
+			vmap->item[re_offset].penalty += ( vmap->item[re_offset].penalty % 5 == 4 ) ? 10 : 4;
 			break;
 
 		case 0x1E:
-			vx->penalty += ( vx->penalty % 5 == 4 ) ? 5 : 4;
+			vmap->item[re_offset].penalty += ( vmap->item[re_offset].penalty % 5 == 4 ) ? 5 : 4;
 			break;
 
 		default:
@@ -183,9 +335,9 @@ int process_msg( char *msg, int len ) {
 	}
 
 	#ifdef DEBUG_FLAG
-	printf( " - <process_msg> Penalty is: %d\n", vx->penalty );
+	printf( " - <process_msg> Penalty is: %d\n", vmap->item[re_offset].penalty );
 	#endif
-	if ( 5 * cfg->loyalty <= vx->penalty ) {
+	if ( 5 * cfg->loyalty <= vmap->item[re_offset].penalty ) {
 		printf( "Blocking addres %s\n", tmp_address );
 		sprintf( tmp_query, "INSERT OR REPLACE INTO filter(addr, id) VALUES (%ld, \"%s\");", (long int)inet_addr( tmp_address ), tmp_account );
 		res = sqlite3_exec( db, tmp_query, db_write_callback, 0, (char **)&err );
@@ -198,7 +350,7 @@ int process_msg( char *msg, int len ) {
 		if ( res != 0 ) {
 			printf( "WARNING: failed to insert rule via iptables\n" );
 		}
-		vmap_del( vx );
+		vmap_del( vmap, re_offset );
 	}
 
 	return 0;
@@ -287,7 +439,7 @@ int main( int argc, char *argv[] ) {
 	cfg = malloc( sizeof( conf_t ) );
 	cfg_tmp = malloc( sizeof( conf_tmp_t ) );
 
-	memset( &vmap, 0, sizeof( vmap ) );
+	vmap_init( vmap );
 
 	// read config
 	cfg_tmp->host = 0x0100007F; // 127.0.0.1, octet-reversed
@@ -351,7 +503,7 @@ int main( int argc, char *argv[] ) {
 	// connect to AMI
 	res = connect( sock, ( struct sockaddr* ) &srv, sizeof( srv ) );
 	if ( res < 0 ) {
-		vmap_itos( cfg_tmp->host, tmp_address );
+		key_to_str( cfg_tmp->host, tmp_address );
 		fprintf( stderr, "ERROR: Cannot connect to remote server %s:%d\n", tmp_address, cfg_tmp->port );
 		shutdown( sock, SHUT_RDWR );
 		sqlite3_close( db );
