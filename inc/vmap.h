@@ -11,6 +11,6 @@ typedef struct {
 } vmap_t;
 
 
-void vmap_init( vmap_t *vmap );
+void vmap_init( vmap_t **vmap );
 int vmap_get( vmap_t *vmap, uint32_t addr );
 int vmap_del( vmap_t *vmap, uint16_t index );

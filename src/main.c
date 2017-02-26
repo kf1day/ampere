@@ -190,12 +190,12 @@ int conf_load( const char *path ) {
 	return 0;
 }
 
-void dbp_get_callback( uint32_t addr ) {
+void db_callback( uint32_t addr ) {
 	int res;
-	
+
 	key_to_str( addr, tmp_address );
 	#ifdef DEBUG_FLAG
-	printf( " - <db_read_callback> Blocking %s during startup\n", tmp_address );
+	printf( " - <db_callback> Blocking %s during startup\n", tmp_address );
 	#endif
 	sprintf( tmp_query, "iptables -A %s -s %s -j REJECT --reject-with icmp-port-unreachable 2>/dev/null", cfg->chain, tmp_address );
 //	printf( "%s\n", tmp_query );
@@ -379,7 +379,7 @@ int main( int argc, char *argv[] ) {
 			if ( len < argc ) {
 				fd = fopen( argv[len], "a" );
 				#ifdef DEBUG_FLAG
-				printf( " - <main> Config path is set via commandline: \"%s\"\n", msg );
+				printf( " - <main> Output path is set via commandline: \"%s\"\n", msg );
 				#endif
 			} else {
 				res = 2;
@@ -444,7 +444,7 @@ int main( int argc, char *argv[] ) {
 	tmp_address = malloc( STR_SZ );
 	tmp_query = malloc( STR_SZ );
 
-	vmap_init( vmap );
+	vmap_init( &vmap );
 	res = dba_init( &dbp, cfg_tmp->lib );
 	if ( res < 0 ) {
 		printf( "ERROR: Failed to open database: \"%s\", code: %d\n", cfg_tmp->lib, res );
@@ -457,7 +457,7 @@ int main( int argc, char *argv[] ) {
 	if ( res < 0 ) {
 		printf( "WARNING: Cannot flush chain \"%s\"\n", cfg->chain );
 	}
-	res = dba_get( dbp, dbp_get_callback );
+	res = dba_get( dbp, db_callback );
 	if ( res < 0 ) {
 		fprintf( stderr, "ERROR: Failed to read database\n" );
 		return -1;
@@ -496,6 +496,8 @@ int main( int argc, char *argv[] ) {
 
 	free( cfg_tmp );
 	cfg_tmp = NULL;
+
+	fflush( stdout );
 
 	if ( fd ) {
 		fclose( stderr );

@@ -1,6 +1,6 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <time.h>
 #include "../inc/dba.h"
 
 
@@ -57,6 +57,7 @@ int dba_get( DB *dbp, void ( *callback )( uint32_t key ) ) {
 int dba_put( DB *dbp, uint32_t addr ) {
 	int res;
 	DBT *key, *val;
+	time_t now;
 
 	key = calloc( 2, sizeof( DBT ) );
 	val = key + 1;
@@ -64,8 +65,9 @@ int dba_put( DB *dbp, uint32_t addr ) {
 	key->data = &addr;
 	key->size = 4;
 
-	val->data = &addr;
-	val->size = 4;
+	now = time( NULL );
+	val->data = &now;
+	val->size = sizeof( time_t );
 
 	res = dbp->put( dbp, NULL, key, val, 0 );
 	if ( res < 0 ) {

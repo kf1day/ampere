@@ -1,4 +1,4 @@
-# Ampere 
+# Ampere
 Often Asterisk PBX is installed on a dedicated server which only provides SIP/IAX services.
 Thus, any suspicious activity should be blocked using the local firewall.
 Ampere uses native Asterisk's Management Interface to track such activities.
@@ -16,8 +16,8 @@ The chain is flushed at application starts, and previously saved rules applies b
 
 ## Dependencies:
 * Asterisk 12 or above
+* Berkeley v5.x Database Libraries
 * libpcre3
-* libdb
 * iptables
 
 
@@ -36,7 +36,7 @@ Ampere is not acting like a natural UNIX daemon (for now) and should be started 
 #### Example of *ampere.service* for systemd:
 ```
 [Unit]
-Description=Ampere 
+Description=Ampere
 After=asterisk.service
 Requires=asterisk.service
 
@@ -56,8 +56,7 @@ WantedBy=multi-user.target
 ## Configuring
 
 ### Firewall
-The main task of Ampere is to control firewall rules in specified chain.
-When application starts, chain should exist and jumping into a chain also should be configured.
+When the application starts, chain should exist; jumping into a chain should be configured.
 
 #### Example of *iptables -S* output:
 ```
@@ -104,7 +103,7 @@ mask = 22
 ```
 
 ### Database
-Ampere creates BerkleyDB internal database file at configured path. Directory should exist.
+Ampere creates an internal BerkleyDB database file at configured path. Directory should exist.
 
 
 ### Asterisk Management Interface
@@ -129,12 +128,10 @@ Then reload asterisk:
 
 
 ## Stability
-Ampere has been tested and successfuly used in production.
+Ampere has tested and successfuly using in production.
 Prerequisites are:
 * Asterisk 12.8.2 and 13.13.1
 * OS Debian 8 with kernel 3.16.0-4-amd64
-* BerkleyDB libraries v5.3
-* iptables v1.4.21
 * GCC version 4.9.2
 
 
