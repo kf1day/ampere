@@ -1,4 +1,4 @@
-# Ampere 
+# Ampere
 Often Asterisk PBX is installed on a dedicated server which only provides SIP/IAX services.
 Thus, any suspicious activity should be blocked using the local firewall.
 Ampere uses native Asterisk's Management Interface to track such activities.
@@ -10,14 +10,14 @@ There is a table of penalties for each host.
 In a case of any suspicious activity, the penalty raises, increment depends on event status.
 Legal event (such as successful auth) removes penalties.
 If the penalties are too high, host blocked in configured chain via `iptables` syscall.
-Each violator is stored in SQLite database.
+Each violator is stored in internal database.
 The chain is flushed at application starts, and previously saved rules applies back again.
 
 
 ## Dependencies:
 * Asterisk 12 or above
+* Berkeley v5.x Database Libraries
 * libpcre3
-* libsqlite3
 * iptables
 
 
@@ -36,7 +36,7 @@ Ampere is not acting like a natural UNIX daemon (for now) and should be started 
 #### Example of *ampere.service* for systemd:
 ```
 [Unit]
-Description=Ampere 
+Description=Ampere
 After=asterisk.service
 Requires=asterisk.service
 
@@ -56,8 +56,7 @@ WantedBy=multi-user.target
 ## Configuring
 
 ### Firewall
-The main task of Ampere is to control firewall rules in specified chain.
-When application starts, chain should exist and jumping into a chain also should be configured.
+When the application starts, chain should exist; jumping into a chain should be configured.
 
 #### Example of *iptables -S* output:
 ```
@@ -87,7 +86,7 @@ The options are:
 
 `chain` - name of chain in firewall table (default: ampere).
 
-`lib` - path to SQLite database (default: /var/lib/ampere/db.sqlite).
+`lib` - path to internal database (default: /var/lib/ampere/filter.db).
 
 `net` - network address of trusted network (default: 0.0.0.0 - consider any host is untrusted).
 
@@ -104,7 +103,7 @@ mask = 22
 ```
 
 ### Database
-Ampere creates SQLite database file at configured path. Directory should exist.
+Ampere creates an internal BerkleyDB database file at configured path. Directory should exist.
 
 
 ### Asterisk Management Interface
@@ -129,7 +128,7 @@ Then reload asterisk:
 
 
 ## Stability
-Ampere has been tested and successfuly used in production.
+Ampere has tested and successfuly using in production.
 Prerequisites are:
 * Asterisk 12.8.2 and 13.13.1
 * OS Debian 8 with kernel 3.16.0-4-amd64

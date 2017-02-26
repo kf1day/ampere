@@ -1,3 +1,6 @@
+## Version 0.2.1
+* SQLite replaced with BerkleyDB
+
 ## Version 0.1d
 * Added configurable internal network
 * Added command-line argument to set output file
