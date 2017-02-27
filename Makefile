@@ -6,7 +6,7 @@ dev: bin/main-dev.o bin/vmap-dev.o bin/dba.o
 	gcc ./bin/vmap-dev.o ./bin/main-dev.o ./bin/dba.o -o ./ampere-dev -lpcre -ldb
 
 clean:
-	rm -f ./bin/* /ampere ./ampere-dev
+	rm -f ./bin/* ./ampere ./ampere-dev
 
 
 bin/main.o: src/main.c

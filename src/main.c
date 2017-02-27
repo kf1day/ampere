@@ -1,23 +1,28 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <time.h>
+#include <db.h>
 #include <pcre.h>
 #include "../inc/vmap.h"
 #include "../inc/dba.h"
 
 
 #define APP_NAME "ampere"
-#define APP_VERSION "0.2.1"
+#define APP_VERSION "0.2.2"
 
 #define STR_SZ 256
 #define MSG_SZ 1024
 #define OVC_SZ 15
 #define PATH_SZ 2048
 
-#define DEF_CFG_PATH "/etc/ampere/ampere.cfg"
-#define DEF_LIB_PATH "/var/lib/ampere/filter.db"
+// this will be configurable at build-time
+#define CFG_PATH "/etc/ampere/ampere.cfg"
+#define LIB_PATH "/var/lib/ampere/filter.db"
+
 #define DEF_AMI_USER "ampere"
 #define DEF_AMI_PASS "ampere"
 #define DEF_FW_CHAIN "ampere"
@@ -66,14 +71,14 @@ int str_to_key( char *addr_str, uint32_t *addr ) {
 	int res;
 
 	res = sscanf( addr_str, "%hhu.%hhu.%hhu.%hhu", &o[3], &o[2], &o[1], &o[0] );
-	if ( res < 0 ) {
+	if ( res != 4 ) {
 		return -1;
 	}
 	memcpy( addr, &o, 4 );
 	return 0;
 }
 
-int conf_readln( FILE *fd, char *buf ) {
+int fd_readln( FILE *fd, char *buf ) {
 	char c;
 	int i = 0;
 
@@ -111,7 +116,7 @@ int conf_load( const char *path ) {
 
 	#define _IS( S ) strcmp( ln+ovc[2], S ) == 0
 	while ( !feof( fd ) ) {
-		res = conf_readln( fd, ln );
+		res = fd_readln( fd, ln );
 		if ( res > 0 ) {
 			res = pcre_exec( re_cfg_keyval, NULL, ln, res, 0, 0, ovc, OVC_SZ );
 			if ( res == 3 ) {
@@ -141,11 +146,6 @@ int conf_load( const char *path ) {
 					strcpy( cfg_tmp->pass, ln+ovc[4] );
 					#ifdef DEBUG_FLAG
 					printf( " - <conf_load> pass is %s\n", cfg_tmp->pass );
-					#endif
-				} else if ( _IS( "lib" ) ) {
-					strcpy( cfg_tmp->lib, ln+ovc[4] );
-					#ifdef DEBUG_FLAG
-					printf( " - <conf_load> lib is %s\n", cfg_tmp->lib );
 					#endif
 				} else if ( _IS( "net" ) ) {
 					res = str_to_key( ln+ovc[4], &cfg->net );
@@ -190,7 +190,7 @@ int conf_load( const char *path ) {
 	return 0;
 }
 
-void db_callback( uint32_t addr ) {
+void db_callback( uint32_t addr, time_t time ) {
 	int res;
 
 	key_to_str( addr, tmp_address );
@@ -202,6 +202,28 @@ void db_callback( uint32_t addr ) {
 	res = system( tmp_query );
 	if ( res != 0 ) {
 		printf( "WARNING: failed to insert rule via iptables\n" );
+	}
+}
+
+void db_dump( uint32_t addr, time_t time ) {
+	struct tm *timestamp;
+	
+	timestamp = localtime( &time );
+
+	key_to_str( addr, tmp_address );
+	strftime( tmp_query, STR_SZ, "%Y-%m-%d %H:%M:%S", timestamp );
+	printf( "%16s | since %s\n", tmp_address, tmp_query );
+}
+
+void db_put( char *addr_str ) {
+	uint32_t addr;
+	int res;
+	
+	res = str_to_key( addr_str, &addr );
+	if ( res < 0 ) {
+		fprintf( stderr, "WARNING: Cannot translate address: \"%s\"\n", addr_str );
+	} else {
+		dba_put( dbp, addr );
 	}
 }
 
@@ -292,7 +314,7 @@ int process_msg( char *msg, int len ) {
 		return 0;
 	}
 
-	re_offset = vmap_get( vmap, addr ); // vmap_get generates message itself
+	re_offset = vmap_get( vmap, addr );
 	if ( re_offset < 0 ) {
 		fprintf( stderr, "FATAL: VMAP exhausted\n" );
 		return -2;
@@ -349,20 +371,68 @@ int main( int argc, char *argv[] ) {
 	uint8_t buf_offset = 0;
 	char *msg = malloc( MSG_SZ * 2 ), *buf_start, *buf_end;
 
+
+	// init VARS
+	tmp_account = malloc( STR_SZ );
+	tmp_address = malloc( STR_SZ );
+	tmp_query = malloc( STR_SZ );
+	vmap_init( &vmap );
+	res = dba_init( &dbp, LIB_PATH );
+	if ( res < 0 ) {
+		printf( "ERROR: Failed to open database: \"%s\"\n", LIB_PATH );
+		return -1;
+	}
+
+
 	// parsing args
-	strcpy( msg, DEF_CFG_PATH );
+	strcpy( msg, CFG_PATH );
 	#define _ARG( S ) strcmp( argv[len], S ) == 0
 	while ( len < argc ) {
-		if ( _ARG( "-V" ) ) {
+		if ( _ARG( "-h" ) || _ARG( "--help" ) ) {
+			printf( "Usage: %s [OPTIONS]\n", APP_NAME );
+			printf( "Valid options:\n" );
+			printf( "  -h, --help           Show this help, then exit\n" );
+			printf( "  -V, --version        Display version number and exit\n" );
+			printf( "  -a, --add            Populate database with addresses from a pipeline\n" );
+			printf( "  -l, --list           List database entries and exit\n" );
+			printf( "  -c <config>          Use alternative configuration file, default is: %s\n", CFG_PATH );
+			printf( "  -o <logfile>         Set output stream to a file\n\n" );
+			res = 0;
+			goto shutdown_dba;
+
+		} else if ( _ARG( "-V" ) || _ARG( "--version" ) ) {
 			#ifdef DEBUG_FLAG
 			printf( "%s/%s+dev\n", APP_NAME, APP_VERSION );
 			#else
 			printf( "%s/%s\n", APP_NAME, APP_VERSION );
 			#endif
-			return 0;
-		} else if ( _ARG( "-h" ) || _ARG( "--help" ) ) {
-			res = 1;
-			break;
+			res = 0;
+			goto shutdown_dba;
+
+		} else if ( _ARG( "-a" ) || _ARG( "--add" ) ) {
+			if ( isatty( STDIN_FILENO ) ) {
+				fprintf( stderr, "ERROR: Not in a pipline\n" );
+			} else {
+				while( !feof( stdin ) ) {
+					res = fd_readln( stdin, msg );
+					if ( res > 0 ) {
+						#ifdef DEBUG_FLAG
+						printf( " - <main> Processing value: %s\n", msg );
+						#endif
+						db_put( msg );
+					}
+				}
+			}
+			goto shutdown_dba;
+
+		} else if ( _ARG( "-l" ) || _ARG( "--list" ) ) {
+			res = dba_get( dbp, db_dump );
+			if ( res < 0 ) {
+				fprintf( stderr, "ERROR: Failed to read database\n" );
+				res = -1;
+			}
+			goto shutdown_dba;
+
 		} else if ( _ARG( "-c" ) ) {
 			len++;
 			if ( len < argc ) {
@@ -371,10 +441,11 @@ int main( int argc, char *argv[] ) {
 				printf( " - <main> Config path is set via commandline: \"%s\"\n", msg );
 				#endif
 			} else {
-				res = 2;
+				res = -1;
 				break;
 			}
-		} else if ( _ARG( "-o" ) || _ARG( "-O" ) ) {
+
+		} else if ( _ARG( "-o" ) ) {
 			len++;
 			if ( len < argc ) {
 				fd = fopen( argv[len], "a" );
@@ -382,41 +453,37 @@ int main( int argc, char *argv[] ) {
 				printf( " - <main> Output path is set via commandline: \"%s\"\n", msg );
 				#endif
 			} else {
-				res = 2;
+				res = -1;
 				break;
 			}
 		} else {
-			res = 2;
+			res = -1;
 			break;
 		}
 		len++;
 	}
-	if( res == 1 ) {
-		printf( "Usage: %s [OPTIONS]\n", APP_NAME );
-		printf( "Valid options:\n" );
-		printf( "  -V                   Display version number and exit\n" );
-		printf( "  -c <config>          Use alternative configuration file, default is: %s\n", DEF_CFG_PATH );
-		printf( "  -o, -O               Set output to a file" );
-		printf( "  -h, --help           Show this help, then exit\n\n" );
-		return 0;
-	}
-	if( res == 2 ) {
+	if( res < 0 ) {
 		fprintf( stderr, "%s: bad arguments\n", APP_NAME );
 		fprintf( stderr, "Try \"%s --help\" for more information\n", argv[0] );
-		return -1;
+		goto shutdown_dba;
 	}
+	fclose( stdin );
+
 
 	// init REGEXP parser
 	re_keyval = pcre_compile( "(.*?): (.*)\r\n", 0, &err, &res, NULL );
 	if ( !re_keyval ) {
 		fprintf( stderr, "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
-		return -2;
+		res = -2;
+		goto shutdown_dba;
 	}
 	re_ipv4 = pcre_compile( "^IPV4/(?:TCP|UDP)/([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})/", 0, &err, &res, NULL );
 	if ( !re_ipv4 ) {
 		fprintf( stderr, "FATAL: Cannot compile REGEX: %d - %s\n", res, err );
-		return -2;
+		res = -2;
+		goto shutdown_dba;
 	}
+
 
 	// read config
 	cfg = malloc( sizeof( conf_t ) );
@@ -426,7 +493,6 @@ int main( int argc, char *argv[] ) {
 	cfg_tmp->port = 5038;
 	strcpy( cfg_tmp->user, DEF_AMI_USER );
 	strcpy( cfg_tmp->pass, DEF_AMI_PASS );
-	strcpy( cfg_tmp->lib, DEF_LIB_PATH );
 
 	cfg->net = 0;
 	cfg->mask = 0;
@@ -435,21 +501,9 @@ int main( int argc, char *argv[] ) {
 
 	res = conf_load( msg ); // conf_load generates message itself
 	if ( res < -1 ) {
-		return res;
+		goto shutdown_dba;
 	}
 
-
-	// init VARS
-	tmp_account = malloc( STR_SZ );
-	tmp_address = malloc( STR_SZ );
-	tmp_query = malloc( STR_SZ );
-
-	vmap_init( &vmap );
-	res = dba_init( &dbp, cfg_tmp->lib );
-	if ( res < 0 ) {
-		printf( "ERROR: Failed to open database: \"%s\", code: %d\n", cfg_tmp->lib, res );
-		return -1;
-	}
 
 	// apply initial fw rules
 	sprintf( tmp_query, "iptables -F %s 2>/dev/null", cfg->chain );
@@ -460,38 +514,40 @@ int main( int argc, char *argv[] ) {
 	res = dba_get( dbp, db_callback );
 	if ( res < 0 ) {
 		fprintf( stderr, "ERROR: Failed to read database\n" );
-		return -1;
+		res = -1;
+		goto shutdown_dba;
 	}
+
 
 	// create socket
 	sock = socket( AF_INET, SOCK_STREAM, 0 );
 	if ( sock < 0 ) {
 		fprintf( stderr, "FATAL: Could not create socket\n" );
-		dba_free( &dbp );
-		return -2;
+		res = -2;
+		goto shutdown_dba;
 	}
 	srv.sin_addr.s_addr = cfg_tmp->host;
 	srv.sin_family = AF_INET;
 	srv.sin_port = htons( cfg_tmp->port );
+
 
 	// connect to AMI
 	res = connect( sock, ( struct sockaddr* ) &srv, sizeof( srv ) );
 	if ( res < 0 ) {
 		key_to_str( cfg_tmp->host, tmp_address );
 		fprintf( stderr, "ERROR: Cannot connect to remote server %s:%d\n", tmp_address, cfg_tmp->port );
-		shutdown( sock, SHUT_RDWR );
-		dba_free( &dbp );
-		return -1;
+		res = -1;
+		goto shutdown_sock;
 	}
+
 
 	// send AUTH message
 	sprintf( msg, "Action: Login\r\nUsername: %s\r\nSecret: %s\r\n\r\n", cfg_tmp->user, cfg_tmp->pass );
 	res = send( sock, msg, strlen( msg ), 0 );
 	if ( res < 0 ) {
 		fprintf( stderr, "FATAL: Send failed\n" );
-		shutdown( sock, SHUT_RDWR );
-		dba_free( &dbp );
-		return -2;
+		res = -2;
+		goto shutdown_sock;
 	}
 
 	free( cfg_tmp );
@@ -507,6 +563,7 @@ int main( int argc, char *argv[] ) {
 	}
 	setbuf( stdout, NULL );
 
+
 	// mainloop
 	printf( "Startup: %s/%s\n", APP_NAME, APP_VERSION );
 	while ( 1 ) {
@@ -515,7 +572,7 @@ int main( int argc, char *argv[] ) {
 			if ( len < 0 ) {
 				fprintf( stderr, "FATAL: Error reciving data\n" );
 				res = -2;
-				goto break_mainloop;
+				goto shutdown_sock;
 			}
 			if ( len > 0 ) {
 				*(msg+buf_offset+len) = 0; // set NULLTERM to message end
@@ -530,7 +587,7 @@ int main( int argc, char *argv[] ) {
 					*buf_end = 0;
 					res = process_msg( buf_start, (int)( buf_end - buf_start ) );
 					if ( res < 0 ) {
-						goto break_mainloop;
+						goto shutdown_sock;
 					}
 					buf_start = buf_end + 2;
 					buf_end = strstr( buf_start, "\r\n\r\n" );
@@ -548,11 +605,10 @@ int main( int argc, char *argv[] ) {
 			buf_offset = 0;
 		}
 	}
-	break_mainloop:;
-
-	printf( "Shutdown\n" );
-
+	shutdown_sock:;
 	shutdown( sock, SHUT_RDWR );
-	dba_free( &dbp );
+
+	shutdown_dba:;
+	dba_free( dbp );
 	return res;
 }
