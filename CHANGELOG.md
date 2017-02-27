@@ -1,3 +1,9 @@
+## Version 0.2.2
+* Database path is hadrcoded
+* Added command-line argument to add hosts to database
+* Added command-line argument to list entries from database
+* Fixed pointer error in dba_free()
+
 ## Version 0.2.1
 * SQLite replaced with BerkleyDB
 
@@ -11,7 +17,7 @@
 
 ## Version 0.1b
 * Added command-line arguments parser
-* Fix VMAP index error
+* Fixed VMAP index error
 
 ## Version 0.1a
 * First release
