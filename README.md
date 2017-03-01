@@ -110,7 +110,7 @@ Directory should exist.
 
 ### Logging
 Ampere prints data to stdout/stderr. In a case of systemd daemonising, this output grabs by syslog.
-Setting `-o /path/to/ampere.log` argument makes application write its own log
+Setting `-o /path/to/ampere.log` argument makes the application to write its own log
 
 
 ### Asterisk Management Interface

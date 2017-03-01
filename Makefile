@@ -2,8 +2,8 @@ default: bin/main.o bin/vmap.o bin/dba.o
 	gcc ./bin/main.o ./bin/vmap.o ./bin/dba.o -o ./ampere -lpcre -ldb
 	strip ./ampere
 
-dev: bin/main-dev.o bin/vmap-dev.o bin/dba.o
-	gcc ./bin/vmap-dev.o ./bin/main-dev.o ./bin/dba.o -o ./ampere-dev -lpcre -ldb
+dev: bin/main-dev.o bin/vmap-dev.o bin/dba-dev.o
+	gcc ./bin/vmap-dev.o ./bin/main-dev.o ./bin/dba-dev.o -o ./ampere-dev -lpcre -ldb
 
 clean:
 	rm -f ./bin/* ./ampere ./ampere-dev
@@ -25,4 +25,7 @@ bin/main-dev.o: src/main.c
 
 bin/vmap-dev.o: src/vmap.c
 	gcc -g -c -Wall ./src/vmap.c -o ./bin/vmap-dev.o
+
+bin/dba-dev.o: src/dba.c
+	gcc -g -c -Wall ./src/dba.c -o ./bin/dba-dev.o
 

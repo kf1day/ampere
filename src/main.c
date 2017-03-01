@@ -58,7 +58,7 @@ DB *dbp;
 
 
 
-int key_to_str( uint32_t addr, char *addr_str ) {
+int key_intstr( uint32_t addr, char *addr_str ) {
 	uint8_t o[4];
 
 	memcpy( &o, &addr, 4 );
@@ -66,7 +66,7 @@ int key_to_str( uint32_t addr, char *addr_str ) {
 	return 0;
 }
 
-int str_to_key( char *addr_str, uint32_t *addr ) {
+int key_strint( const char *addr_str, uint32_t *addr ) {
 	uint8_t o[4];
 	int res;
 
@@ -105,7 +105,8 @@ int conf_load( const char *path ) {
 
 	fd = fopen( path, "r" );
 	if ( !fd ) {
-		printf( "WARNING: Cannot open config file: \"%s\" - using default values\n", path );
+		fprintf( stdout,  "WARNING: Cannot open config file: \"%s\" - using default values\n", path );
+		fflush( stdout );
 		return -1;
 	}
 	re_cfg_keyval = pcre_compile( "^\\s*(.*?)\\s*=\\s*(.*)[\\s;#]*.*$", 0, &err, &res, NULL );
@@ -124,64 +125,43 @@ int conf_load( const char *path ) {
 				*(ln+ovc[5]) = 0;
 				if ( _IS( "host" ) ) {
 					cfg_tmp->host = inet_addr( ln+ovc[4] );
-					#ifdef DEBUG_FLAG
-					printf( " - <conf_load> host is %s\n", ln+ovc[4] );
-					#endif
 				} else if ( _IS( "port" ) ) {
 					res = atoi( ln+ovc[4] );
 					if ( res > 0 ) {
 						cfg_tmp->port = res;
-						#ifdef DEBUG_FLAG
-						printf( " - <conf_load> port is %d\n", cfg_tmp->port );
-						#endif
 					} else {
-						printf( "WARNING: Cannot convert \"port\" value to an integer" );
+						fprintf( stdout, "WARNING: Skipping incorrect \"port\" value\n" );
+						fflush( stdout );
 					}
 				} else if ( _IS( "user" ) ) {
 					strcpy( cfg_tmp->user, ln+ovc[4] );
-					#ifdef DEBUG_FLAG
-					printf( " - <conf_load> user is %s\n", cfg_tmp->user );
-					#endif
 				} else if ( _IS( "pass" ) ) {
 					strcpy( cfg_tmp->pass, ln+ovc[4] );
-					#ifdef DEBUG_FLAG
-					printf( " - <conf_load> pass is %s\n", cfg_tmp->pass );
-					#endif
 				} else if ( _IS( "net" ) ) {
-					res = str_to_key( ln+ovc[4], &cfg->net );
+					res = key_strint( ln+ovc[4], &cfg->net );
 					if ( res < 0 ) {
 						cfg->net = 0;
-						printf( "WARNING: Cannot convert \"net\" value to an address" );
-					#ifdef DEBUG_FLAG
-					} else {
-						printf( " - <conf_load> net is %s\n", ln+ovc[4] );
-					#endif
+						fprintf( stdout, "WARNING: Skipping incorrect \"net\" value\n" );
+						fflush( stdout );
 					}
 				} else if ( _IS( "mask" ) ) {
 					res = atoi( ln+ovc[4] );
 					if ( res > 0 && res <= 32 ) {
 						cfg->mask = 32 - res;
-						#ifdef DEBUG_FLAG
-						printf( " - <conf_load> mask is %d\n", res );
-						#endif
 					} else {
-						printf( "WARNING: Cannot convert \"mask\" value to an integer" );
+						fprintf( stdout, "WARNING: Skipping incorrect \"mask\" value\n" );
+						fflush( stdout );
 					}
 				} else if ( _IS( "loyalty" ) ) {
 					res = atoi( ln+ovc[4] );
 					if ( res > 0 ) {
 						cfg->loyalty = res;
-						#ifdef DEBUG_FLAG
-						printf( " - <conf_load> loyalty is %d\n", cfg->loyalty );
-						#endif
 					} else {
-						printf( "WARNING: Cannot convert \"loyalty\" value to an integer" );
+						fprintf( stdout, "WARNING: Skipping incorrect \"loyalty\" value\n" );
+						fflush( stdout );
 					}
 				} else if ( _IS( "chain" ) ) {
 					strcpy( cfg->chain, ln+ovc[4] );
-					#ifdef DEBUG_FLAG
-					printf( " - <conf_load> chain is %s\n", cfg->chain );
-					#endif
 				}
 			}
 		}
@@ -193,15 +173,13 @@ int conf_load( const char *path ) {
 void db_callback( uint32_t addr, time_t time ) {
 	int res;
 
-	key_to_str( addr, tmp_address );
-	#ifdef DEBUG_FLAG
-	printf( " - <db_callback> Blocking %s during startup\n", tmp_address );
-	#endif
+	key_intstr( addr, tmp_address );
 	sprintf( tmp_query, "iptables -A %s -s %s -j REJECT --reject-with icmp-port-unreachable 2>/dev/null", cfg->chain, tmp_address );
-//	printf( "%s\n", tmp_query );
+	fflush( stdout );
 	res = system( tmp_query );
 	if ( res != 0 ) {
-		printf( "WARNING: failed to insert rule via iptables\n" );
+		fprintf( stdout, "WARNING: failed to insert rule via iptables\n" );
+		fflush( stdout );
 	}
 }
 
@@ -210,18 +188,20 @@ void db_dump( uint32_t addr, time_t time ) {
 	
 	timestamp = localtime( &time );
 
-	key_to_str( addr, tmp_address );
+	key_intstr( addr, tmp_address );
 	strftime( tmp_query, STR_SZ, "%Y-%m-%d %H:%M:%S", timestamp );
-	printf( "%16s | since %s\n", tmp_address, tmp_query );
+	fprintf( stdout, "%16s | since %s\n", tmp_address, tmp_query );
+	fflush( stdout );
 }
 
 void db_put( char *addr_str ) {
 	uint32_t addr;
 	int res;
 	
-	res = str_to_key( addr_str, &addr );
+	res = key_strint( addr_str, &addr );
 	if ( res < 0 ) {
-		fprintf( stderr, "WARNING: Cannot translate address: \"%s\"\n", addr_str );
+		fprintf( stdout, "WARNING: Cannot translate address: \"%s\"\n", addr_str );
+		fflush( stdout );
 	} else {
 		dba_put( dbp, addr );
 	}
@@ -240,11 +220,13 @@ int process_msg( char *msg, int len ) {
 		*(msg+ovc[5]) = 0;
 		re_offset = ovc[1];
 		#ifdef DEBUG_FLAG
-		printf( "   | %s \"%s\"\n", msg+ovc[2], msg+ovc[4] );
+		fprintf( stdout, "   | %s \"%s\"\n", msg+ovc[2], msg+ovc[4] );
+		fflush( stdout );
 		#endif
 		if ( _K( "Response" ) ) {
 			if ( _V( "Success" ) ) {
-				printf( "Authentication accepted\n" );
+				fprintf( stdout, "Authentication accepted\n" );
+				fflush( stdout );
 				return 0;
 			}
 			if (_V( "Error" ) ) {
@@ -276,40 +258,47 @@ int process_msg( char *msg, int len ) {
 	}
 
 	#ifdef DEBUG_FLAG
-	printf( " - <process_msg> State is 0x%X, account: \"%s\", address: \"%s\"\n", state, tmp_account, tmp_address );
+	fprintf( stdout, " - <process_msg> State is 0x%X, account: \"%s\", address: \"%s\"\n", state, tmp_account, tmp_address );
+	fflush( stdout );
 	#endif
 
 	if ( !( state & 0xF0 ) ) {
 		#ifdef DEBUG_FLAG
-		printf( " - <process_msg> Message does not met required event type\n" );
+		fprintf( stdout, " - <process_msg> Message does not met required event type\n" );
+		fflush( stdout );
 		#endif
 		return 0;
 	}
 	if ( !( state & 0x08 ) ) {
 		#ifdef DEBUG_FLAG
-		printf( " - <process_msg> Message does not met required service type\n" );
+		fprintf( stdout, " - <process_msg> Message does not met required service type\n" );
+		fflush( stdout );
 		#endif
 		return 0;
 	}
 
 	if ( !( state & 0x04 ) ) {
-		printf( "WARNING: Incomplete message - \"RemoteAddress\" is not specified or unknown, skipping\n" );
+		fprintf( stdout, "WARNING: Incomplete message - \"RemoteAddress\" is not specified or unknown, skipping\n" );
+		fflush( stdout );
 		return 0;
 	}
 
 	if ( !( state & 0x02 ) ) {
-		printf( "WARNING: Incomplete message - \"AccountID\" is not specified\n" );
+		fprintf( stdout, "WARNING: Incomplete message - \"AccountID\" is not specified\n" );
+		fflush( stdout );
 	}
 
-	res = str_to_key( tmp_address, &addr );
+	res = key_strint( tmp_address, &addr );
 	if ( res < 0 ) {
-		printf( "WARNING: Cannot translate address: %s\n", tmp_address );
+		fprintf( stdout, "WARNING: Cannot translate address: %s\n", tmp_address );
+		fflush( stdout );
 		return 0;
 	}
 
 	if ( addr >> cfg->mask == cfg->net >> cfg->mask ) {
 		#ifdef DEBUG_FLAG
-		printf( " - <process_msg> Skipping internal address\n" );
+		fprintf( stdout, " - <process_msg> Skipping internal address\n" );
+		fflush( stdout );
 		#endif
 		return 0;
 	}
@@ -323,7 +312,8 @@ int process_msg( char *msg, int len ) {
 	switch ( state ) {
 		case 0x8E:
 			#ifdef DEBUG_FLAG
-			printf( " - <process_msg> Account \"%s\" successfuly logged in from address: \"%s\"\n", tmp_account, tmp_address );
+			fprintf( stdout, " - <process_msg> Account \"%s\" successfuly logged in from address: \"%s\"\n", tmp_account, tmp_address );
+			fflush( stdout );
 			#endif
 			vmap_del( vmap, re_offset );
 			return 0;
@@ -341,23 +331,28 @@ int process_msg( char *msg, int len ) {
 			break;
 
 		default:
-			printf( "WARNING: unexpected state\n" );
+			fprintf( stdout, "WARNING: unexpected state\n" );
+			fflush( stdout );
 			return 0;
 	}
 
 	#ifdef DEBUG_FLAG
-	printf( " - <process_msg> Penalty is: %d\n", vmap->item[re_offset].penalty );
+	fprintf( stdout, " - <process_msg> Penalty is: %d\n", vmap->item[re_offset].penalty );
+	fflush( stdout );
 	#endif
 	if ( 5 * cfg->loyalty <= vmap->item[re_offset].penalty ) {
-		printf( "Blocking addres %s\n", tmp_address );
+		fprintf( stdout, "Blocking addres %s\n", tmp_address );
+	fflush( stdout );
 		res = dba_put( dbp, addr );
 		if ( res < 0 ) {
-			printf( "WARNING: Cannot save address to database\n" );
+			fprintf( stdout, "WARNING: Cannot save address to database\n" );
+			fflush( stdout );
 		}
 		sprintf( tmp_query, "iptables -A %s -s %s -j REJECT --reject-with icmp-port-unreachable 2>/dev/null", cfg->chain, tmp_address );
 		res = system( tmp_query );
 		if ( res != 0 ) {
-			printf( "WARNING: Failed to insert rule via iptables\n" );
+			fprintf( stdout, "WARNING: Failed to insert rule via iptables\n" );
+			fflush( stdout );
 		}
 		vmap_del( vmap, re_offset );
 	}
@@ -372,73 +367,52 @@ int main( int argc, char *argv[] ) {
 	char *msg = malloc( MSG_SZ * 2 ), *buf_start, *buf_end;
 
 
-	// init VARS
-	tmp_account = malloc( STR_SZ );
-	tmp_address = malloc( STR_SZ );
-	tmp_query = malloc( STR_SZ );
-	vmap_init( &vmap );
-	res = dba_init( &dbp, LIB_PATH );
-	if ( res < 0 ) {
-		printf( "ERROR: Failed to open database: \"%s\"\n", LIB_PATH );
-		return -1;
-	}
-
-
 	// parsing args
 	strcpy( msg, CFG_PATH );
 	#define _ARG( S ) strcmp( argv[len], S ) == 0
 	while ( len < argc ) {
 		if ( _ARG( "-h" ) || _ARG( "--help" ) ) {
-			printf( "Usage: %s [OPTIONS]\n", APP_NAME );
-			printf( "Valid options:\n" );
-			printf( "  -h, --help           Show this help, then exit\n" );
-			printf( "  -V, --version        Display version number and exit\n" );
-			printf( "  -a, --add            Populate database with addresses from a pipeline\n" );
-			printf( "  -l, --list           List database entries and exit\n" );
-			printf( "  -c <config>          Use alternative configuration file, default is: %s\n", CFG_PATH );
-			printf( "  -o <logfile>         Set output stream to a file\n\n" );
-			res = 0;
-			goto shutdown_dba;
+			fprintf( stdout, "Usage: %s [OPTIONS]\n", APP_NAME );
+			fprintf( stdout, "Valid options:\n" );
+			fprintf( stdout, "  -h, --help           Show this help, then exit\n" );
+			fprintf( stdout, "  -V, --version        Display version number and exit\n" );
+			fprintf( stdout, "  -a, --add            Populate database with addresses from a pipeline\n" );
+			fprintf( stdout, "  -l, --list           List database entries and exit\n" );
+			fprintf( stdout, "  -c <config>          Use alternative configuration file, default is: %s\n", CFG_PATH );
+			fprintf( stdout, "  -o <logfile>         Set output stream to a file\n\n" );
+			fflush( stdout );
+			return 0;
 
 		} else if ( _ARG( "-V" ) || _ARG( "--version" ) ) {
 			#ifdef DEBUG_FLAG
-			printf( "%s/%s+dev\n", APP_NAME, APP_VERSION );
+			fprintf( stdout, "%s/%s+dev\n", APP_NAME, APP_VERSION );
+			fflush( stdout );
 			#else
-			printf( "%s/%s\n", APP_NAME, APP_VERSION );
+			fprintf( stdout, "%s/%s\n", APP_NAME, APP_VERSION );
+			fflush( stdout );
 			#endif
-			res = 0;
-			goto shutdown_dba;
+			return 0;
 
 		} else if ( _ARG( "-a" ) || _ARG( "--add" ) ) {
 			if ( isatty( STDIN_FILENO ) ) {
 				fprintf( stderr, "ERROR: Not in a pipline\n" );
+				return -1;
 			} else {
-				while( !feof( stdin ) ) {
-					res = fd_readln( stdin, msg );
-					if ( res > 0 ) {
-						#ifdef DEBUG_FLAG
-						printf( " - <main> Processing value: %s\n", msg );
-						#endif
-						db_put( msg );
-					}
-				}
+				buf_offset = 1;
+				break;
 			}
-			goto shutdown_dba;
 
 		} else if ( _ARG( "-l" ) || _ARG( "--list" ) ) {
-			res = dba_get( dbp, db_dump );
-			if ( res < 0 ) {
-				fprintf( stderr, "ERROR: Failed to read database\n" );
-				res = -1;
-			}
-			goto shutdown_dba;
+			buf_offset = 2;
+			break;
 
 		} else if ( _ARG( "-c" ) ) {
 			len++;
 			if ( len < argc ) {
 				strcpy( msg, argv[len] );
 				#ifdef DEBUG_FLAG
-				printf( " - <main> Config path is set via commandline: \"%s\"\n", msg );
+				fprintf( stdout, " - <main> Config path is set via commandline: \"%s\"\n", msg );
+				fflush( stdout );
 				#endif
 			} else {
 				res = -1;
@@ -450,7 +424,8 @@ int main( int argc, char *argv[] ) {
 			if ( len < argc ) {
 				fd = fopen( argv[len], "a" );
 				#ifdef DEBUG_FLAG
-				printf( " - <main> Output path is set via commandline: \"%s\"\n", msg );
+				fprintf( stdout, " - <main> Output path is set via commandline: \"%s\"\n", msg );
+				fflush( stdout );
 				#endif
 			} else {
 				res = -1;
@@ -467,7 +442,42 @@ int main( int argc, char *argv[] ) {
 		fprintf( stderr, "Try \"%s --help\" for more information\n", argv[0] );
 		goto shutdown_dba;
 	}
-	fclose( stdin );
+
+
+	// init VARS
+	tmp_account = malloc( STR_SZ );
+	tmp_address = malloc( STR_SZ );
+	tmp_query = malloc( STR_SZ );
+	vmap_init( &vmap );
+	res = dba_init( &dbp, LIB_PATH );
+	if ( res < 0 ) {
+		fprintf( stderr, "ERROR: Failed to open database: \"%s\"\n", LIB_PATH );
+		return -1;
+	}
+
+	if ( buf_offset == 1 ) {
+		while( !feof( stdin ) ) {
+			res = fd_readln( stdin, msg );
+			if ( res > 0 ) {
+				#ifdef DEBUG_FLAG
+				fprintf( stdout, " - <main> Processing value: %s\n", msg );
+				fflush( stdout );
+				#endif
+				db_put( msg );
+			}
+		}
+		res = 0;
+		goto shutdown_dba;
+	}
+
+	if ( buf_offset == 2 ) {
+		res = dba_get( dbp, db_dump );
+		if ( res < 0 ) {
+			fprintf( stderr, "ERROR: Failed to read database\n" );
+			res = -1;
+		}
+		goto shutdown_dba;
+	}
 
 
 	// init REGEXP parser
@@ -509,7 +519,8 @@ int main( int argc, char *argv[] ) {
 	sprintf( tmp_query, "iptables -F %s 2>/dev/null", cfg->chain );
 	res = system( tmp_query );
 	if ( res < 0 ) {
-		printf( "WARNING: Cannot flush chain \"%s\"\n", cfg->chain );
+		fprintf( stdout, "WARNING: Cannot flush chain \"%s\"\n", cfg->chain );
+	fflush( stdout );
 	}
 	res = dba_get( dbp, db_callback );
 	if ( res < 0 ) {
@@ -534,7 +545,7 @@ int main( int argc, char *argv[] ) {
 	// connect to AMI
 	res = connect( sock, ( struct sockaddr* ) &srv, sizeof( srv ) );
 	if ( res < 0 ) {
-		key_to_str( cfg_tmp->host, tmp_address );
+		key_intstr( cfg_tmp->host, tmp_address );
 		fprintf( stderr, "ERROR: Cannot connect to remote server %s:%d\n", tmp_address, cfg_tmp->port );
 		res = -1;
 		goto shutdown_sock;
@@ -552,20 +563,20 @@ int main( int argc, char *argv[] ) {
 
 	free( cfg_tmp );
 	cfg_tmp = NULL;
-
+	fclose( stdin );
 	fflush( stdout );
-
 	if ( fd ) {
 		fclose( stderr );
 		fclose( stdout );
 		stdout = fd;
 		stderr = fd;
 	}
-	setbuf( stdout, NULL );
+	chdir( "/" );
 
 
 	// mainloop
-	printf( "Startup: %s/%s\n", APP_NAME, APP_VERSION );
+	fprintf( stdout, "Startup: %s/%s\n", APP_NAME, APP_VERSION );
+	fflush( stdout );
 	while ( 1 ) {
 		if ( buf_offset < MSG_SZ ) {
 			len = recv( sock, msg + buf_offset, MSG_SZ, 0 );
@@ -601,7 +612,8 @@ int main( int argc, char *argv[] ) {
 				}
 			}
 		} else {
-			printf( "WARNING: Buffer too large: %d\n", buf_offset );
+			fprintf( stdout, "WARNING: Buffer too large: %d\n", buf_offset );
+			fflush( stdout );
 			buf_offset = 0;
 		}
 	}

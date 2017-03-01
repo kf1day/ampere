@@ -9,13 +9,13 @@ int dba_init( DB **dbp, const char *path ) {
 	int res;
 
 	res = db_create( dbp, NULL, 0 );
-	if ( res < 0 ) {
-		return -1;
+	if ( res != 0 ) {
+		return -2;
 	}
 
 	res = (*dbp)->open( *dbp, NULL, path, NULL, DB_BTREE, DB_CREATE, 0 );
-	if ( res < 0 ) {
-		return -2;
+	if ( res != 0 ) {
+		return -1;
 	}
 
 	return 0;
