@@ -170,12 +170,11 @@ int conf_load( const char *path ) {
 	return 0;
 }
 
-void db_callback( uint32_t addr, time_t time ) {
+void callback_filter( uint32_t addr, time_t time ) {
 	int res;
 
 	key_intstr( addr, tmp_address );
 	sprintf( tmp_query, "iptables -A %s -s %s -j REJECT --reject-with icmp-port-unreachable 2>/dev/null", cfg->chain, tmp_address );
-	fflush( stdout );
 	res = system( tmp_query );
 	if ( res != 0 ) {
 		fprintf( stdout, "WARNING: failed to insert rule via iptables\n" );
@@ -183,7 +182,7 @@ void db_callback( uint32_t addr, time_t time ) {
 	}
 }
 
-void db_dump( uint32_t addr, time_t time ) {
+void callback_dump( uint32_t addr, time_t time ) {
 	struct tm *timestamp;
 	
 	timestamp = localtime( &time );
@@ -471,7 +470,7 @@ int main( int argc, char *argv[] ) {
 	}
 
 	if ( buf_offset == 2 ) {
-		res = dba_get( dbp, db_dump );
+		res = dba_get( dbp, callback_dump );
 		if ( res < 0 ) {
 			fprintf( stderr, "ERROR: Failed to read database\n" );
 			res = -1;
@@ -520,9 +519,9 @@ int main( int argc, char *argv[] ) {
 	res = system( tmp_query );
 	if ( res < 0 ) {
 		fprintf( stdout, "WARNING: Cannot flush chain \"%s\"\n", cfg->chain );
-	fflush( stdout );
+		fflush( stdout );
 	}
-	res = dba_get( dbp, db_callback );
+	res = dba_get( dbp, callback_filter );
 	if ( res < 0 ) {
 		fprintf( stderr, "ERROR: Failed to read database\n" );
 		res = -1;

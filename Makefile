@@ -10,7 +10,7 @@ clean:
 
 
 bin/main.o: src/main.c
-	gcc -O1 -c -Wall ./src/main.c -o ./bin/main.o
+	gcc -O2 -c -Wall ./src/main.c -o ./bin/main.o
 
 bin/vmap.o: src/vmap.c
 	gcc -O1 -c -Wall ./src/vmap.c -o ./bin/vmap.o
