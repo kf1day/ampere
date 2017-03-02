@@ -98,7 +98,7 @@ int fd_readln( FILE *fd, char *buf ) {
 }
 
 int conf_load( const char *path ) {
-	char *ln = malloc( MSG_SZ );
+	char *ln = malloc( MSG_SZ ), *ch;
 	int res;
 	FILE *fd;
 	pcre *re_cfg_keyval;
@@ -107,7 +107,7 @@ int conf_load( const char *path ) {
 	if ( !fd ) {
 		fprintf( stdout,  "WARNING: Cannot open config file: \"%s\" - using default values\n", path );
 		fflush( stdout );
-		return -1;
+		return 1;
 	}
 	re_cfg_keyval = pcre_compile( "^\\s*(.*?)\\s*=\\s*(.*)[\\s;#]*.*$", 0, &err, &res, NULL );
 	if ( !re_cfg_keyval ) {
@@ -125,6 +125,7 @@ int conf_load( const char *path ) {
 				*(ln+ovc[5]) = 0;
 				if ( _IS( "host" ) ) {
 					cfg_tmp->host = inet_addr( ln+ovc[4] );
+
 				} else if ( _IS( "port" ) ) {
 					res = atoi( ln+ovc[4] );
 					if ( res > 0 ) {
@@ -133,25 +134,32 @@ int conf_load( const char *path ) {
 						fprintf( stdout, "WARNING: Skipping incorrect \"port\" value\n" );
 						fflush( stdout );
 					}
+
 				} else if ( _IS( "user" ) ) {
 					strcpy( cfg_tmp->user, ln+ovc[4] );
+
 				} else if ( _IS( "pass" ) ) {
 					strcpy( cfg_tmp->pass, ln+ovc[4] );
-				} else if ( _IS( "net" ) ) {
+
+				} else if ( _IS( "trust" ) ) {
+					ch = strstr( ln+ovc[4], "/" );
+					if ( ch ) {
+						*ch = 0;
+						res = atoi( ch+1 );
+						if ( res > 0 && res <= 32 ) {
+							cfg->mask = 32 - res;
+						} else {
+							fprintf( stdout, "WARNING: Skipping incorrect \"trust\" (mask) value\n" );
+							fflush( stdout );
+						}
+					}
 					res = key_strint( ln+ovc[4], &cfg->net );
 					if ( res < 0 ) {
-						cfg->net = 0;
-						fprintf( stdout, "WARNING: Skipping incorrect \"net\" value\n" );
+						cfg->mask = 0;
+						fprintf( stdout, "WARNING: Skipping incorrect \"trust\" value\n" );
 						fflush( stdout );
 					}
-				} else if ( _IS( "mask" ) ) {
-					res = atoi( ln+ovc[4] );
-					if ( res > 0 && res <= 32 ) {
-						cfg->mask = 32 - res;
-					} else {
-						fprintf( stdout, "WARNING: Skipping incorrect \"mask\" value\n" );
-						fflush( stdout );
-					}
+
 				} else if ( _IS( "loyalty" ) ) {
 					res = atoi( ln+ovc[4] );
 					if ( res > 0 ) {
@@ -160,6 +168,7 @@ int conf_load( const char *path ) {
 						fprintf( stdout, "WARNING: Skipping incorrect \"loyalty\" value\n" );
 						fflush( stdout );
 					}
+
 				} else if ( _IS( "chain" ) ) {
 					strcpy( cfg->chain, ln+ovc[4] );
 				}
@@ -184,19 +193,19 @@ void callback_filter( uint32_t addr, time_t time ) {
 
 void callback_dump( uint32_t addr, time_t time ) {
 	struct tm *timestamp;
-	
+
 	timestamp = localtime( &time );
 
 	key_intstr( addr, tmp_address );
 	strftime( tmp_query, STR_SZ, "%Y-%m-%d %H:%M:%S", timestamp );
-	fprintf( stdout, "%16s | since %s\n", tmp_address, tmp_query );
+	fprintf( stdout, " %15s | since %s\n", tmp_address, tmp_query );
 	fflush( stdout );
 }
 
 void db_put( char *addr_str ) {
 	uint32_t addr;
 	int res;
-	
+
 	res = key_strint( addr_str, &addr );
 	if ( res < 0 ) {
 		fprintf( stdout, "WARNING: Cannot translate address: \"%s\"\n", addr_str );
@@ -219,28 +228,23 @@ int process_msg( char *msg, int len ) {
 		*(msg+ovc[5]) = 0;
 		re_offset = ovc[1];
 		#ifdef DEBUG_FLAG
-		fprintf( stdout, "   | %s \"%s\"\n", msg+ovc[2], msg+ovc[4] );
-		fflush( stdout );
+		fprintf( stdout, "   | %20s | %s\n", msg+ovc[2], msg+ovc[4] );
 		#endif
-		if ( _K( "Response" ) ) {
-			if ( _V( "Success" ) ) {
-				fprintf( stdout, "Authentication accepted\n" );
-				fflush( stdout );
-				return 0;
-			}
-			if (_V( "Error" ) ) {
-				fprintf( stderr, "ERROR: Authentication failed\n" );
-				return -1;
-			}
+		if ( _K( "Response" ) && _V( "Error" ) ) {
+			fprintf( stderr, "ERROR: Authentication failed\n" );
+			return -1;
+
 		} else if ( _K( "Event" ) ) {
 			if ( _V( "SuccessfulAuth" ) ) state |= 0x80;
 			if ( _V( "ChallengeResponseFailed" ) ) state |= 0x40;
 			if ( _V( "InvalidPassword" ) ) state |= 0x40;
 			if ( _V( "ChallengeSent" ) ) state |= 0x20;
 			if ( _V( "FailedACL" ) ) state |= 0x10;
+
 		} else if ( _K( "Service" ) ) {
 			if ( _V( "SIP" ) ) state |= 0x08;
 			if ( _V( "IAX2" ) ) state |= 0x08;
+
 		} else if ( _K( "RemoteAddress" ) ) {
 			strcpy( tmp_address, msg+ovc[4] );
 			res = pcre_exec( re_ipv4, NULL, tmp_address, ovc[5] - ovc[4], 0, 0, ovc, OVC_SZ );
@@ -249,6 +253,7 @@ int process_msg( char *msg, int len ) {
 				strcpy( tmp_address, tmp_address + ovc[2] );
 				state |= 0x04;
 			}
+
 		} else if ( _K( "AccountID" ) ) {
 			strcpy( tmp_account, msg+ovc[4] );
 			state |= 0x02;
@@ -257,20 +262,20 @@ int process_msg( char *msg, int len ) {
 	}
 
 	#ifdef DEBUG_FLAG
-	fprintf( stdout, " - <process_msg> State is 0x%X, account: \"%s\", address: \"%s\"\n", state, tmp_account, tmp_address );
+	fprintf( stdout, "   |----------------------| State is 0x%X, account: \"%s\", address: \"%s\"\n", state, tmp_account, tmp_address );
 	fflush( stdout );
 	#endif
 
 	if ( !( state & 0xF0 ) ) {
 		#ifdef DEBUG_FLAG
-		fprintf( stdout, " - <process_msg> Message does not met required event type\n" );
+		fprintf( stdout, "   |----------------------| Message does not met required event type\n" );
 		fflush( stdout );
 		#endif
 		return 0;
 	}
 	if ( !( state & 0x08 ) ) {
 		#ifdef DEBUG_FLAG
-		fprintf( stdout, " - <process_msg> Message does not met required service type\n" );
+		fprintf( stdout, "   |----------------------| Message does not met required service type\n" );
 		fflush( stdout );
 		#endif
 		return 0;
@@ -296,7 +301,7 @@ int process_msg( char *msg, int len ) {
 
 	if ( addr >> cfg->mask == cfg->net >> cfg->mask ) {
 		#ifdef DEBUG_FLAG
-		fprintf( stdout, " - <process_msg> Skipping internal address\n" );
+		fprintf( stdout, "   |----------------------| Skipping internal address\n" );
 		fflush( stdout );
 		#endif
 		return 0;
@@ -311,7 +316,7 @@ int process_msg( char *msg, int len ) {
 	switch ( state ) {
 		case 0x8E:
 			#ifdef DEBUG_FLAG
-			fprintf( stdout, " - <process_msg> Account \"%s\" successfuly logged in from address: \"%s\"\n", tmp_account, tmp_address );
+			fprintf( stdout, "   |----------------------| Account \"%s\" successfuly logged in from address: \"%s\"\n", tmp_account, tmp_address );
 			fflush( stdout );
 			#endif
 			vmap_del( vmap, re_offset );
@@ -336,12 +341,12 @@ int process_msg( char *msg, int len ) {
 	}
 
 	#ifdef DEBUG_FLAG
-	fprintf( stdout, " - <process_msg> Penalty is: %d\n", vmap->item[re_offset].penalty );
+	fprintf( stdout, "   |----------------------| Penalty is: %d\n", vmap->item[re_offset].penalty );
 	fflush( stdout );
 	#endif
 	if ( 5 * cfg->loyalty <= vmap->item[re_offset].penalty ) {
 		fprintf( stdout, "Blocking addres %s\n", tmp_address );
-	fflush( stdout );
+		fflush( stdout );
 		res = dba_put( dbp, addr );
 		if ( res < 0 ) {
 			fprintf( stdout, "WARNING: Cannot save address to database\n" );
@@ -385,11 +390,10 @@ int main( int argc, char *argv[] ) {
 		} else if ( _ARG( "-V" ) || _ARG( "--version" ) ) {
 			#ifdef DEBUG_FLAG
 			fprintf( stdout, "%s/%s+dev\n", APP_NAME, APP_VERSION );
-			fflush( stdout );
 			#else
 			fprintf( stdout, "%s/%s\n", APP_NAME, APP_VERSION );
-			fflush( stdout );
 			#endif
+			fflush( stdout );
 			return 0;
 
 		} else if ( _ARG( "-a" ) || _ARG( "--add" ) ) {
@@ -410,7 +414,7 @@ int main( int argc, char *argv[] ) {
 			if ( len < argc ) {
 				strcpy( msg, argv[len] );
 				#ifdef DEBUG_FLAG
-				fprintf( stdout, " - <main> Config path is set via commandline: \"%s\"\n", msg );
+				fprintf( stdout, "   <main> Config path is set via commandline: \"%s\"\n", msg );
 				fflush( stdout );
 				#endif
 			} else {
@@ -423,7 +427,7 @@ int main( int argc, char *argv[] ) {
 			if ( len < argc ) {
 				fd = fopen( argv[len], "a" );
 				#ifdef DEBUG_FLAG
-				fprintf( stdout, " - <main> Output path is set via commandline: \"%s\"\n", msg );
+				fprintf( stdout, "   <main> Output path is set via commandline: \"%s\"\n", msg );
 				fflush( stdout );
 				#endif
 			} else {
@@ -439,7 +443,7 @@ int main( int argc, char *argv[] ) {
 	if( res < 0 ) {
 		fprintf( stderr, "%s: bad arguments\n", APP_NAME );
 		fprintf( stderr, "Try \"%s --help\" for more information\n", argv[0] );
-		goto shutdown_dba;
+		return -1;
 	}
 
 
@@ -459,7 +463,7 @@ int main( int argc, char *argv[] ) {
 			res = fd_readln( stdin, msg );
 			if ( res > 0 ) {
 				#ifdef DEBUG_FLAG
-				fprintf( stdout, " - <main> Processing value: %s\n", msg );
+				fprintf( stdout, "   <main> Processing value: \"%s\"\n", msg );
 				fflush( stdout );
 				#endif
 				db_put( msg );
@@ -509,7 +513,7 @@ int main( int argc, char *argv[] ) {
 	strcpy( cfg->chain, DEF_FW_CHAIN );
 
 	res = conf_load( msg ); // conf_load generates message itself
-	if ( res < -1 ) {
+	if ( res < 0 ) {
 		goto shutdown_dba;
 	}
 
