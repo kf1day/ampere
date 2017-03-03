@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdint.h>
+#include <db.h>
 #include <time.h>
 #include "../inc/dba.h"
 
@@ -8,36 +9,27 @@ int dba_init( DB **dbp, const char *path ) {
 	int res;
 
 	res = db_create( dbp, NULL, 0 );
-	if ( res < 0 ) {
-		return -1;
+	if ( res != 0 ) {
+		return -2;
 	}
 
 	res = (*dbp)->open( *dbp, NULL, path, NULL, DB_BTREE, DB_CREATE, 0 );
-	if ( res < 0 ) {
-		return -2;
+	if ( res != 0 ) {
+		return -1;
 	}
 
 	return 0;
 }
 
-void dba_free( DB **dbp ) {
-	int res;
+void dba_free( DB *dbp ) {
 
-	res = (*dbp)->close( *dbp, 0 );
-	if ( !res ) {
-		free( *dbp );
-		*dbp = NULL;
-	}
+	dbp->close( dbp, 0 );
 }
 
-int dba_get( DB *dbp, void ( *callback )( uint32_t key ) ) {
+int dba_get( DB *dbp, void ( *callback )( uint32_t key, time_t val ) ) {
 	int res;
 	DBC *pos;
 	DBT *key, *val;
-
-	if ( !dbp ) {
-		return -2;
-	}
 
 	res = dbp->cursor( dbp, NULL, &pos, 0 );
 	if ( res < 0 ) {
@@ -48,7 +40,7 @@ int dba_get( DB *dbp, void ( *callback )( uint32_t key ) ) {
 	val = key + 1;
 
 	while( pos->get( pos, key, val, DB_NEXT ) == 0 ) {
-		callback( *(uint32_t*)key->data );
+		callback( *(uint32_t*)key->data, *(time_t*)val->data );
 	}
 	pos->close( pos );
 	return 0;

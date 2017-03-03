@@ -1,7 +1,5 @@
 # Ampere
-Often Asterisk PBX is installed on a dedicated server which only provides SIP/IAX services.
-Thus, any suspicious activity should be blocked using the local firewall.
-Ampere uses native Asterisk's Management Interface to track such activities.
+An active network filter for Asterisk PBX
 
 
 ## Synopsis
@@ -11,7 +9,7 @@ In a case of any suspicious activity, the penalty raises, increment depends on e
 Legal event (such as successful auth) removes penalties.
 If the penalties are too high, host blocked in configured chain via `iptables` syscall.
 Each violator is stored in internal database.
-The chain is flushed at application starts, and previously saved rules applies back again.
+The chain is flushed at application starts, and previously stored rules applies back again.
 
 
 ## Dependencies:
@@ -24,21 +22,21 @@ The chain is flushed at application starts, and previously saved rules applies b
 ## Building
 `make` - build stripped executable
 
-`make dev` - build unstripped executable with extra verbosity (such as parsed config variables, recived messages, etc)
+`make dev` - build unstripped executable with debug symbols and some extra verbosity (such as parsed config variables, recived messages, etc)
 
 
 ## Installation
 * Put `ampere.cfg` into `/etc/ampere/`
 * Put executable anywhere you want, e.g. `/usr/lib/ampere/`
 
-Ampere is not acting like a natural UNIX daemon (for now) and should be started via SystemD / SysV init script.
+Ampere is not acting like a natural UNIX daemon (for now) and should be forked via SystemD / SysV init script.
 
 #### Example of *ampere.service* for systemd:
 ```
 [Unit]
 Description=Ampere
 After=asterisk.service
-Requires=asterisk.service
+Wants=asterisk.service
 
 [Service]
 Type=simple
@@ -69,12 +67,16 @@ When the application starts, chain should exist; jumping into a chain should be 
 -A INPUT -i eth0 -j DROP
 ```
 
+
+
 ### Config file
-By default, application reads config from `/etc/ampere/ampere.cfg`. This can be overriden by setting `-c /path/to/ampere.cfg` argument
+By default, the application reads config from `/etc/ampere/ampere.cfg`.
+This can be overriden by setting `-c /path/to/ampere.cfg` argument
 
 The options are:
 
-`host` - AMI interface address (default: 127.0.0.1). Due to `iptables` executes locally, it makes sense to only use loopback addresses
+`host` - AMI interface address (default: 127.0.0.1).
+Due to `iptables` executes locally, it makes sense to only use loopback addresses
 
 `port` - AMI interface port (default: 5038)
 
@@ -82,32 +84,35 @@ The options are:
 
 `pass` - AMI interface secret (default: ampere)
 
-`loyalty` - Multiplier for penalties upper limit (default: 3). In most cases than mean number of allowed authentication attempts.
+`loyalty` - Multiplier for penalties upper limit (default: 3).
+In most cases than mean number of allowed authentication attempts.
 
 `chain` - name of chain in firewall table (default: ampere).
 
-`lib` - path to internal database (default: /var/lib/ampere/filter.db).
-
-`net` - network address of trusted network (default: 0.0.0.0 - consider any host is untrusted).
-
-`mask` - mask of trusted network, value is: 0-32 (default: 0)
-
+`trust` - network address(/mask) of trusted host or network (default: 0.0.0.0/32 - consider any host is untrusted).
 
 #### Example of *ampere.cfg*:
 ```
 pass = 123
 loyalty = 4
 chain = ampere-firewall
-net = 192.168.0.0
-mask = 22
+trust = 192.168.0.0/22
 ```
 
 ### Database
-Ampere creates an internal BerkleyDB database file at configured path. Directory should exist.
+Ampere creates an internal BerkleyDB database file at compile-time configured path.
+Directory should exist.
+
+
+### Logging
+Ampere prints data to stdout/stderr. In a case of systemd daemonising, this output grabs by syslog.
+Setting `-o /path/to/ampere.log` argument makes the application to write its own log
 
 
 ### Asterisk Management Interface
-AMI also should be configured for accept connections and sent security events
+AMI also should be configured to accept connections and sent security- and system-level events.
+Sending the only events Ampere waits for may be useful.
+It can be made by specifying some `eventfilter` directives.
 
 #### Example of asterisk's *manager.conf*
 ```
@@ -119,8 +124,14 @@ bindaddr = 127.0.0.1
 
 [ampere]
 secret = 123
-read = security
+read = security,system
 write = no
+eventfilter = Event: ChallengeResponseFailed
+eventfilter = Event: ChallengeSent
+eventfilter = Event: FailedACL
+eventfilter = Event: InvalidPassword
+eventfilter = Event: Shutdown
+eventfilter = Event: SuccessfulAuth
 ```
 
 Then reload asterisk:
