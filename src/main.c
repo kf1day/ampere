@@ -240,6 +240,11 @@ int process_msg( char *msg, int len ) {
 			if ( _V( "InvalidPassword" ) ) state |= 0x40;
 			if ( _V( "ChallengeSent" ) ) state |= 0x20;
 			if ( _V( "FailedACL" ) ) state |= 0x10;
+			if ( _V( "Shutdown" ) ) {
+				fprintf( stdout, "Got shutdown message, terminating\n" );
+				fflush( stdout );
+				return -1;
+			}
 
 		} else if ( _K( "Service" ) ) {
 			if ( _V( "SIP" ) ) state |= 0x08;

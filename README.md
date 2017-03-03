@@ -1,7 +1,5 @@
 # Ampere
-Often Asterisk PBX is installed on a dedicated server which only provides SIP/IAX services.
-Thus, any suspicious activity should be blocked using the local firewall.
-Ampere uses native Asterisk's Management Interface to track such activities.
+An active network filter for Asterisk PBX
 
 
 ## Synopsis
@@ -11,7 +9,7 @@ In a case of any suspicious activity, the penalty raises, increment depends on e
 Legal event (such as successful auth) removes penalties.
 If the penalties are too high, host blocked in configured chain via `iptables` syscall.
 Each violator is stored in internal database.
-The chain is flushed at application starts, and previously saved rules applies back again.
+The chain is flushed at application starts, and previously stored rules applies back again.
 
 
 ## Dependencies:
@@ -38,7 +36,7 @@ Ampere is not acting like a natural UNIX daemon (for now) and should be forked v
 [Unit]
 Description=Ampere
 After=asterisk.service
-Requires=asterisk.service
+Wants=asterisk.service
 
 [Service]
 Type=simple
@@ -69,6 +67,8 @@ When the application starts, chain should exist; jumping into a chain should be 
 -A INPUT -i eth0 -j DROP
 ```
 
+
+
 ### Config file
 By default, the application reads config from `/etc/ampere/ampere.cfg`.
 This can be overriden by setting `-c /path/to/ampere.cfg` argument
@@ -89,18 +89,14 @@ In most cases than mean number of allowed authentication attempts.
 
 `chain` - name of chain in firewall table (default: ampere).
 
-`net` - network address of trusted network (default: 0.0.0.0 - consider any host is untrusted).
-
-`mask` - mask of trusted network, value is: 0-32 (default: 0)
-
+`trust` - network address(/mask) of trusted host or network (default: 0.0.0.0/32 - consider any host is untrusted).
 
 #### Example of *ampere.cfg*:
 ```
 pass = 123
 loyalty = 4
 chain = ampere-firewall
-net = 192.168.0.0
-mask = 22
+trust = 192.168.0.0/22
 ```
 
 ### Database
@@ -114,7 +110,9 @@ Setting `-o /path/to/ampere.log` argument makes the application to write its own
 
 
 ### Asterisk Management Interface
-AMI also should be configured to accept connections and sent security events
+AMI also should be configured to accept connections and sent security- and system-level events.
+Sending the only events Ampere waits for may be useful.
+It can be made by specifying some `eventfilter` directives.
 
 #### Example of asterisk's *manager.conf*
 ```
@@ -126,8 +124,14 @@ bindaddr = 127.0.0.1
 
 [ampere]
 secret = 123
-read = security
+read = security,system
 write = no
+eventfilter = Event: ChallengeResponseFailed
+eventfilter = Event: ChallengeSent
+eventfilter = Event: FailedACL
+eventfilter = Event: InvalidPassword
+eventfilter = Event: Shutdown
+eventfilter = Event: SuccessfulAuth
 ```
 
 Then reload asterisk:
