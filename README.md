@@ -5,11 +5,11 @@ An active network filter for Asterisk PBX
 ## Synopsis
 The application subscribes to Asterisk's Management Interface (AMI) security events.
 There is a table of penalties for each host.
-In a case of any suspicious activity, the penalty raises, increment depends on event status.
+In case of any suspicious activity, the penalty raises, increment depends on event status.
 Legal event (such as successful auth) removes penalties.
 If the penalties are too high, host blocked in configured chain via `iptables` syscall.
 Each violator is stored in internal database.
-The chain is flushed at application starts, and previously stored rules applies back again.
+The chain is flushed once application starts, and previously stored rules applies back again.
 
 
 ## Dependencies:
@@ -110,9 +110,9 @@ Setting `-o /path/to/ampere.log` argument makes the application to write its own
 
 
 ### Asterisk Management Interface
-AMI also should be configured to accept connections and sent security- and system-level events.
-Sending the only events Ampere waits for may be useful.
-It can be made by specifying some `eventfilter` directives.
+AMI also should be configured to accept connections and send security- and system-level events.
+Sending only those messages for which the application waits can be the useful.
+It can be done by specifying some `eventfilter` directives.
 
 #### Example of asterisk's *manager.conf*
 ```
@@ -139,7 +139,7 @@ Then reload asterisk:
 
 
 ## Stability
-Ampere has tested and successfuly using in production.
+Ampere has tested and successfuly applied to production.
 Prerequisites are:
 * Asterisk 12.8.2 and 13.13.1
 * OS Debian 8 with kernel 3.16.0-4-amd64
