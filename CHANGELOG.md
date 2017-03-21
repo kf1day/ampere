@@ -1,5 +1,8 @@
+## Version 0.2.3
+* Added command-line argument to delete hosts from database
+
 ## Version 0.2.2
-* Database path is hadrcoded
+* Database path is hardcoded
 * Added command-line argument to add hosts to database
 * Added command-line argument to list entries from database
 * Added "Shutdown" event processing

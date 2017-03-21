@@ -26,7 +26,7 @@ void dba_free( DB *dbp ) {
 	dbp->close( dbp, 0 );
 }
 
-int dba_get( DB *dbp, void ( *callback )( uint32_t key, time_t val ) ) {
+int dba_getall( DB *dbp, void ( *callback )( uint32_t key, time_t val ) ) {
 	int res;
 	DBC *pos;
 	DBT *key, *val;
@@ -62,6 +62,24 @@ int dba_put( DB *dbp, uint32_t addr ) {
 	val->size = sizeof( time_t );
 
 	res = dbp->put( dbp, NULL, key, val, 0 );
+	if ( res < 0 ) {
+		return -1;
+	}
+	dbp->sync( dbp, 0 );
+
+	return 0;
+}
+
+int dba_del( DB *dbp, uint32_t addr ) {
+	int res;
+	DBT *key;
+
+	key = calloc( 1, sizeof( DBT ) );
+
+	key->data = &addr;
+	key->size = 4;
+
+	res = dbp->del( dbp, NULL, key, 0 );
 	if ( res < 0 ) {
 		return -1;
 	}

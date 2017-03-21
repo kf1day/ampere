@@ -10,9 +10,11 @@
 #include "../inc/vmap.h"
 #include "../inc/dba.h"
 
+#define DBG( ... ) fprintf( stdout, "   [DEBUG] %s: ", __FUNCTION__ ); fprintf( stdout, __VA_ARGS__ ); fprintf( stdout, "\n" ); fflush( stdout )
+
 
 #define APP_NAME "ampere"
-#define APP_VERSION "0.2.2"
+#define APP_VERSION "0.2.3"
 
 #define STR_SZ 256
 #define MSG_SZ 1024
@@ -58,7 +60,7 @@ DB *dbp;
 
 
 
-int key_intstr( uint32_t addr, char *addr_str ) {
+int k_inst( const uint32_t addr, char *addr_str ) {
 	uint8_t o[4];
 
 	memcpy( &o, &addr, 4 );
@@ -66,7 +68,7 @@ int key_intstr( uint32_t addr, char *addr_str ) {
 	return 0;
 }
 
-int key_strint( const char *addr_str, uint32_t *addr ) {
+int k_stin( const char *addr_str, uint32_t *addr ) {
 	uint8_t o[4];
 	int res;
 
@@ -153,7 +155,7 @@ int conf_load( const char *path ) {
 							fflush( stdout );
 						}
 					}
-					res = key_strint( ln+ovc[4], &cfg->net );
+					res = k_stin( ln+ovc[4], &cfg->net );
 					if ( res < 0 ) {
 						cfg->mask = 0;
 						fprintf( stdout, "WARNING: Skipping incorrect \"trust\" value\n" );
@@ -179,10 +181,10 @@ int conf_load( const char *path ) {
 	return 0;
 }
 
-void callback_filter( uint32_t addr, time_t time ) {
+void cb_filter( uint32_t addr, time_t time ) {
 	int res;
 
-	key_intstr( addr, tmp_address );
+	k_inst( addr, tmp_address );
 	sprintf( tmp_query, "iptables -A %s -s %s -j REJECT --reject-with icmp-port-unreachable 2>/dev/null", cfg->chain, tmp_address );
 	res = system( tmp_query );
 	if ( res != 0 ) {
@@ -191,31 +193,35 @@ void callback_filter( uint32_t addr, time_t time ) {
 	}
 }
 
-void callback_dump( uint32_t addr, time_t time ) {
+void cb_list( uint32_t addr, time_t time ) {
 	struct tm *timestamp;
 
 	timestamp = localtime( &time );
 
-	key_intstr( addr, tmp_address );
+	k_inst( addr, tmp_address );
 	strftime( tmp_query, STR_SZ, "%Y-%m-%d %H:%M:%S", timestamp );
 	fprintf( stdout, " %15s | since %s\n", tmp_address, tmp_query );
 	fflush( stdout );
 }
 
-void db_put( char *addr_str ) {
+void db_operate( char *addr_str, uint8_t del ) {
 	uint32_t addr;
 	int res;
 
-	res = key_strint( addr_str, &addr );
+	res = k_stin( addr_str, &addr );
 	if ( res < 0 ) {
 		fprintf( stdout, "WARNING: Cannot translate address: \"%s\"\n", addr_str );
 		fflush( stdout );
 	} else {
-		dba_put( dbp, addr );
+		if ( del ) {
+			dba_del( dbp, addr );
+		} else {
+			dba_put( dbp, addr );
+		}
 	}
 }
 
-int process_msg( char *msg, int len ) {
+int worker( char *msg, int len ) {
 	int res, re_offset = 0;
 	uint8_t state = 0;
 	uint32_t addr;
@@ -297,7 +303,7 @@ int process_msg( char *msg, int len ) {
 		fflush( stdout );
 	}
 
-	res = key_strint( tmp_address, &addr );
+	res = k_stin( tmp_address, &addr );
 	if ( res < 0 ) {
 		fprintf( stdout, "WARNING: Cannot translate address: %s\n", tmp_address );
 		fflush( stdout );
@@ -350,7 +356,7 @@ int process_msg( char *msg, int len ) {
 	fflush( stdout );
 	#endif
 	if ( 5 * cfg->loyalty <= vmap->item[re_offset].penalty ) {
-		fprintf( stdout, "Blocking addres %s\n", tmp_address );
+		fprintf( stdout, "Blocking addres %s with state 0x%X\n", tmp_address, state );
 		fflush( stdout );
 		res = dba_put( dbp, addr );
 		if ( res < 0 ) {
@@ -383,10 +389,11 @@ int main( int argc, char *argv[] ) {
 		if ( _ARG( "-h" ) || _ARG( "--help" ) ) {
 			fprintf( stdout, "Usage: %s [OPTIONS]\n", APP_NAME );
 			fprintf( stdout, "Valid options:\n" );
-			fprintf( stdout, "  -h, --help           Show this help, then exit\n" );
-			fprintf( stdout, "  -V, --version        Display version number and exit\n" );
-			fprintf( stdout, "  -a, --add            Populate database with addresses from a pipeline\n" );
-			fprintf( stdout, "  -l, --list           List database entries and exit\n" );
+			fprintf( stdout, "  -h, --help           Show this help\n" );
+			fprintf( stdout, "  -V, --version        Display version number\n" );
+			fprintf( stdout, "  -a, --add            Read STDIN for addresses to add to DB\n" );
+			fprintf( stdout, "  -l, --list           List database entries\n" );
+			fprintf( stdout, "  -d, --del            Read STDIN for addresses to remove from DB\n" );
 			fprintf( stdout, "  -c <config>          Use alternative configuration file, default is: %s\n", CFG_PATH );
 			fprintf( stdout, "  -o <logfile>         Set output stream to a file\n\n" );
 			fflush( stdout );
@@ -410,8 +417,17 @@ int main( int argc, char *argv[] ) {
 				break;
 			}
 
+		} else if ( _ARG( "-d" ) || _ARG( "--del" ) ) {
+			if ( isatty( STDIN_FILENO ) ) {
+				fprintf( stderr, "ERROR: Not in a pipline\n" );
+				return -1;
+			} else {
+				buf_offset = 2;
+				break;
+			}
+
 		} else if ( _ARG( "-l" ) || _ARG( "--list" ) ) {
-			buf_offset = 2;
+			buf_offset = 3;
 			break;
 
 		} else if ( _ARG( "-c" ) ) {
@@ -468,18 +484,31 @@ int main( int argc, char *argv[] ) {
 			res = fd_readln( stdin, msg );
 			if ( res > 0 ) {
 				#ifdef DEBUG_FLAG
-				fprintf( stdout, "   <main> Processing value: \"%s\"\n", msg );
-				fflush( stdout );
+				DBG( "Adding %s", msg );
 				#endif
-				db_put( msg );
+				db_operate( msg, 0 );
+			}
+		}
+		res = 0;
+		goto shutdown_dba;
+	}
+	
+	if ( buf_offset == 2 ) {
+		while( !feof( stdin ) ) {
+			res = fd_readln( stdin, msg );
+			if ( res > 0 ) {
+				#ifdef DEBUG_FLAG
+				DBG( "Deleting %s", msg );
+				#endif
+				db_operate( msg, 1 );
 			}
 		}
 		res = 0;
 		goto shutdown_dba;
 	}
 
-	if ( buf_offset == 2 ) {
-		res = dba_get( dbp, callback_dump );
+	if ( buf_offset == 3 ) {
+		res = dba_getall( dbp, cb_list );
 		if ( res < 0 ) {
 			fprintf( stderr, "ERROR: Failed to read database\n" );
 			res = -1;
@@ -530,7 +559,7 @@ int main( int argc, char *argv[] ) {
 		fprintf( stdout, "WARNING: Cannot flush chain \"%s\"\n", cfg->chain );
 		fflush( stdout );
 	}
-	res = dba_get( dbp, callback_filter );
+	res = dba_getall( dbp, cb_filter );
 	if ( res < 0 ) {
 		fprintf( stderr, "ERROR: Failed to read database\n" );
 		res = -1;
@@ -553,7 +582,7 @@ int main( int argc, char *argv[] ) {
 	// connect to AMI
 	res = connect( sock, ( struct sockaddr* ) &srv, sizeof( srv ) );
 	if ( res < 0 ) {
-		key_intstr( cfg_tmp->host, tmp_address );
+		k_inst( cfg_tmp->host, tmp_address );
 		fprintf( stderr, "ERROR: Cannot connect to remote server %s:%d\n", tmp_address, cfg_tmp->port );
 		res = -1;
 		goto shutdown_sock;
@@ -604,7 +633,7 @@ int main( int argc, char *argv[] ) {
 				while ( buf_end ) {
 					buf_end += 2; // grab first CRLF
 					*buf_end = 0;
-					res = process_msg( buf_start, (int)( buf_end - buf_start ) );
+					res = worker( buf_start, (int)( buf_end - buf_start ) );
 					if ( res < 0 ) {
 						goto shutdown_sock;
 					}

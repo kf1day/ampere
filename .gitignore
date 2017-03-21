@@ -1,3 +1,4 @@
-/ampere
-/ampere-dev
+ampere*
+dev-ampere
 /bin/*
+test*
