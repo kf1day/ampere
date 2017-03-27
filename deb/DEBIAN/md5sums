@@ -1,3 +1,3 @@
-527bad544403624a198e83ac3703dde6  /usr/sbin/ampere
-881e23d302991adc2e184ec4656a18a1  /lib/systemd/system/ampere.service
+3be1d70ac848f76dbac4a8552308af51  /usr/sbin/ampere
+bc11fac7bba8ff704c84a85ae0c87cc7  /lib/systemd/system/ampere.service
 edf1ab6c4061f31a9fce1f8ecf63ef76  /etc/ampere/ampere.cfg

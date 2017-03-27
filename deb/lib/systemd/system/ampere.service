@@ -1,0 +1,15 @@
+[Unit]
+Description=An active network filter for Asterisk PBX
+After=asterisk.service
+Wants=asterisk.service
+
+[Service]
+Type=simple
+TimeoutSec=120
+
+SyslogIdentifier=ampere
+
+ExecStart=/usr/sbin/ampere -o /var/log/ampere.log
+
+[Install]
+WantedBy=multi-user.target

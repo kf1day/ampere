@@ -1,5 +1,5 @@
 Package: ampere
-Version: 0.2.3-3
+Version: 0.2.3-2
 Architecture: amd64
 Section: net
 Maintainer: Andrew Day <andrew.lugovoy@gmail.com>
