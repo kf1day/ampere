@@ -10,11 +10,11 @@
 #include "../inc/vmap.h"
 #include "../inc/dba.h"
 
-#define MSG_FATAL( ... ) fprintf( stderr, "[\x1b[31mFATAL\x1b[0m] %-15s ", __FUNCTION__ ); fprintf( stderr, __VA_ARGS__ ); fprintf( stderr, "\n" )
-#define MSG_ERROR( ... ) fprintf( stderr, "[\x1b[31mERROR\x1b[0m] %-15s ", __FUNCTION__ ); fprintf( stderr, __VA_ARGS__ ); fprintf( stderr, "\n" )
-#define MSG_DEBUG( ... ) printf( "[\x1b[32mDEBUG\x1b[0m] %-15s ", __FUNCTION__ ); printf( __VA_ARGS__ ); printf( "\n" )
-#define MSG_SUCCESS( ... ) printf( "[\x1b[32mSUCCESS\x1b[0m] %-15s ", __FUNCTION__ ); printf( __VA_ARGS__ ); printf( "\n" )
-#define MSG_WARN( ... ) printf( "[\x1b[33mWARNING\x1b[0m] %-15s ", __FUNCTION__ ); printf( __VA_ARGS__ ); printf( "\n" )
+#define MSG_FATAL( ... ) fprintf( stderr, "[\x1b[31mFATAL\x1b[0m] %12s  ", __FUNCTION__ ); fprintf( stderr, __VA_ARGS__ ); fprintf( stderr, "\n" )
+#define MSG_ERROR( ... ) fprintf( stderr, "[\x1b[31mERROR\x1b[0m] %12s  ", __FUNCTION__ ); fprintf( stderr, __VA_ARGS__ ); fprintf( stderr, "\n" )
+#define MSG_DEBUG( ... ) printf( "[\x1b[32mDEBUG\x1b[0m] %12s  ", __FUNCTION__ ); printf( __VA_ARGS__ ); printf( "\n" )
+#define MSG_SUCCESS( ... ) printf( "[\x1b[32mSUCCESS\x1b[0m] %10s  ", __FUNCTION__ ); printf( __VA_ARGS__ ); printf( "\n" )
+#define MSG_WARN( ... ) printf( "[\x1b[33mWARNING\x1b[0m] %10s  ", __FUNCTION__ ); printf( __VA_ARGS__ ); printf( "\n" )
 
 
 #define APP_NAME "ampere"
@@ -113,7 +113,7 @@ int conf_load( const char *path ) {
 	int res;
 	FILE *fd;
 	pcre *re_cfg_keyval;
-	uint8_t ni = 0;
+//	uint8_t ni = 0;
 
 	fd = fopen( path, "r" );
 	if ( !fd ) {
@@ -170,7 +170,7 @@ int conf_load( const char *path ) {
 						#ifdef DEBUG_FLAG
 						MSG_DEBUG( "Trusted network is set: %s/%d", ln+ovc[4], 32 - cfg->mask[cfg->ni] );
 						#endif
-						ni++;
+						cfg->ni++;
 					}
 
 				} else if ( _IS( "loyalty" ) ) {
@@ -409,11 +409,7 @@ int main( int argc, char *argv[] ) {
 			return 0;
 
 		} else if ( _ARG( "-V" ) || _ARG( "--version" ) ) {
-			#ifdef DEBUG_FLAG
-			fprintf( stdout, APP_NAME "/" APP_VERSION "+dev\n" );
-			#else
-			fprintf( stdout, APP_NAME "/" APP_VERSION "\n" );
-			#endif
+			fprintf( stdout, APP_NAME "/" APP_VERSION " build " BUILDTIME "\n" );
 			fflush( stdout );
 			return 0;
 
