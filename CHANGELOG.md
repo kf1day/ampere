@@ -1,3 +1,8 @@
+## Version 0.2.3
+* Added command-line argument to delete hosts from database
+* Added multi-value support for trusted networks
+* Build time is now showing in version info
+
 ## Version 0.2.2
 * Database path is hardcoded
 * Added command-line argument to add hosts to database
