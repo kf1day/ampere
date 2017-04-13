@@ -38,6 +38,7 @@
 
 typedef struct {
 	char chain[STR_SZ];
+	char ignore[PATH_SZ];
 	uint8_t loyalty, mask[TRUST_SZ], ni;
 	uint32_t net[TRUST_SZ];
 } conf_t;
@@ -183,6 +184,9 @@ int conf_load( const char *path ) {
 
 				} else if ( _IS( "chain" ) ) {
 					strcpy( cfg->chain, ln+ovc[4] );
+
+				} else if ( _IS( "ignore" ) ) {
+					strcpy( cfg->ignore, ln+ovc[4] );
 				}
 			}
 		}
@@ -314,6 +318,16 @@ int worker( char *msg, int len ) {
 	if ( res < 0 ) {
 		fprintf( stdout, "WARNING: Cannot translate address: %s\n", tmp_address );
 		fflush( stdout );
+		return 0;
+	}
+	
+	sprintf( tmp_query, "|%s|", tmp_account );
+//	res = strstr( tmp_query, cfg->ignore );
+	if ( strstr( cfg->ignore, tmp_query ) ) {
+		#ifdef DEBUG_FLAG
+		fprintf( stdout, "   |----------------------| Ignoring preconfigured account\n" );
+		fflush( stdout );
+		#endif
 		return 0;
 	}
 
@@ -549,6 +563,7 @@ int main( int argc, char *argv[] ) {
 	cfg->ni = 0;
 	cfg->loyalty = DEF_LOYALTY;
 	strcpy( cfg->chain, DEF_FW_CHAIN );
+	cfg->ignore[0] = 0;
 
 	res = conf_load( msg ); // conf_load generates message itself
 	if ( res < 0 ) {
