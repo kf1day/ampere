@@ -1,3 +1,6 @@
+## Version 0.2.4
+* Added cofig variable to skip event checks for some users
+
 ## Version 0.2.3
 * Added command-line argument to delete hosts from database
 * Added multi-value support for trusted networks

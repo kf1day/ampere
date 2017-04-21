@@ -18,7 +18,7 @@
 
 
 #define APP_NAME "ampere"
-#define APP_VERSION "0.2.3"
+#define APP_VERSION "0.2.4"
 
 #define STR_SZ 256
 #define MSG_SZ 1024
